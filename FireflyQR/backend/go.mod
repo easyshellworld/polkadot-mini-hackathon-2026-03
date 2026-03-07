@@ -1,0 +1,49 @@
+module whale-vault/relay
+
+go 1.24.0
+
+toolchain go1.24.11
+
+require (
+	github.com/ethereum/go-ethereum v1.16.7
+	github.com/gorilla/mux v1.8.1
+	github.com/joho/godotenv v1.5.1
+	github.com/oschwald/geoip2-golang v1.13.0
+	github.com/redis/go-redis/v9 v9.17.2
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+)
+
+require (
+	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
+	github.com/StackExchange/wmi v1.2.1 // indirect
+	github.com/axgle/mahonia v0.0.0-20180208002826-3358181d7394 // indirect
+	github.com/bits-and-blooms/bitset v1.20.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/consensys/gnark-crypto v0.18.0 // indirect
+	github.com/crate-crypto/go-eth-kzg v1.4.0 // indirect
+	github.com/crate-crypto/go-ipa v0.0.0-20240724233137-53bbb0ceb27a // indirect
+	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
+	github.com/ethereum/go-verkle v0.2.2 // indirect
+	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/holiman/uint256 v1.3.2 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
+	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
+	github.com/rs/cors v1.8.0 // indirect
+	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
+	github.com/tklauser/go-sysconf v0.3.16 // indirect
+	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/ying32/qqwry v0.0.0-20190505043336-8ac11027dd79 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
+)
+
+replace github.com/tyler-smith/go-bip39 => github.com/tyler-smith/go-bip39 v1.1.0

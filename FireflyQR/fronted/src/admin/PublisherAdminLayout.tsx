@@ -1,0 +1,919 @@
+// PublisherAdminLayout.tsx
+// ✅ Hackathon-safe build:
+// - Hide download-mode toggle button
+// - Force envMode = "real" (cannot enter mock)
+// - Keep existing OutletContext API for compatibility
+
+import React, { useEffect, useState } from "react";
+import { Outlet, useNavigate } from "react-router-dom";
+
+import { useAppMode } from "../contexts/AppModeContext";
+import { useApi } from "../hooks/useApi";
+import { MOCK_BOOKS, MOCK_REGIONS, getTotalSales } from "../data/mockData";
+import { showToast, ToastContainer } from "../components/ui/CyberpunkToast";
+
+import { RPC_URL, USDT_ADDRESS, TREASURY_ADDRESS, DEPLOY_FEE_USDT, EXPLORER_URL } from "../config/chain";
+
+export interface BookSales {
+  address: string;
+  symbol: string;
+  name: string;
+  author: string;
+  sales: number;
+  explorerUrl: string;
+  /** 部署者地址（可选，部署时写入） */
+  deployer?: string;
+}
+export interface RegionRank {
+  region: string;
+  count: number;
+}
+
+export type PublisherOutletContext = {
+  // env / header
+  envMode: "real" | "mock";
+  toggleEnvMode: () => void;
+  apiBaseUrl: string; // (kept for compatibility, but API calls below do NOT rely on it)
+  pubAddress: string;
+
+  // balance (原生代币，单位由链决定：PAS/CFX/ETH 等)
+  balanceCFX: number;
+  balanceSymbol: string;
+  maxDeploys: number;
+  balanceLoading: boolean;
+  fetchPublisherBalanceData: () => Promise<void>;
+
+  // token balance (USDT/others via RPC)
+  balanceUSDT: number;
+  usdtLoading: boolean;
+
+  // after topup
+  refreshAfterTopup: (token?: { symbol?: string; address?: string }) => Promise<void>;
+
+  // overview data
+  bookSales: BookSales[];
+  regionRanks: RegionRank[];
+  totalSales: number;
+
+  // on-chain NFT stats (per contract)
+  nftStatsMap: Record<
+    string,
+    {
+      contract: string;
+      last_scanned_block: number;
+      minted_total: number;
+      unique_minters: number;
+      unique_real_users: number;
+    }
+  >;
+  refreshNftStats: (contracts?: string[]) => Promise<void>;
+
+  // add book form
+  bookName: string;
+  setBookName: (v: string) => void;
+  author: string;
+  setAuthor: (v: string) => void;
+  symbol: string;
+  setSymbol: (v: string) => void;
+  serial: string;
+  setSerial: (v: string) => void;
+  contractAddr: string | null;
+  setContractAddr: (v: string | null) => void;
+
+  // qrcode form
+  count: number;
+  setCount: (v: number) => void;
+
+  // 已部署书籍列表（下拉框用，real 模式）
+  bookListForDropdown: { bookAddr: string; name?: string; symbol?: string; author?: string; serial?: string }[];
+  bookListLoading: boolean;
+  fetchBookListForDropdown: () => Promise<void>;
+
+  // real search（保留兼容，qrcode 页已改为下拉框）
+  bookQuery: string;
+  setBookQuery: (v: string) => void;
+  bookCandidates: any[];
+  bookSearchLoading: boolean;
+  selectedBook: any | null;
+  setSelectedBook: (v: any | null) => void;
+
+  // status
+  loading: boolean;
+  opLoading: boolean;
+  error: string | null;
+
+  // handlers
+  handleDeployContract: () => Promise<void>;
+  handleGenerateBatch: () => Promise<void>;
+
+  // helpers
+  shortenAddress: (addr: string) => string;
+};
+
+const shortenAddress = (addr: string) => {
+  const a = (addr || "").trim();
+  if (/^0x[a-fA-F0-9]{40}$/.test(a)) return `${a.slice(0, 6)}...${a.slice(-4)}`;
+  return a;
+};
+const isHexAddress = (addr: string) => /^0x[a-fA-F0-9]{40}$/.test((addr || "").trim());
+
+/** 后端可能返回 Unknown，前端统一显示为「未知」 */
+const normalizeRegionName = (name: string) =>
+  !name || name === "Unknown" ? "未知" : name;
+
+/**
+ * ✅ IMPORTANT FIX:
+ * Never construct API URLs using a route prefix like "/publisher-admin".
+ * Always call backend with an absolute path (starting with "/") or full origin.
+ * This prevents requests like "/publisher-admin/api/v1/..." which would be swallowed by SPA fallback and return index.html.
+ */
+const origin = () => (typeof window !== "undefined" ? window.location.origin : "");
+
+/**
+ * Parse filename from Content-Disposition.
+ * - Supports: filename="a.zip"
+ * - Supports: filename*=UTF-8''a%20b.zip
+ */
+const pickFilenameFromContentDisposition = (cd: string, fallback: string) => {
+  if (!cd) return fallback;
+
+  const mStar = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (mStar?.[1]) {
+    try {
+      return decodeURIComponent(mStar[1].trim());
+    } catch {
+      return mStar[1].trim();
+    }
+  }
+
+  const m = cd.match(/filename\s*=\s*([^;]+)/i);
+  if (m?.[1]) return m[1].trim().replace(/^"|"$/g, "");
+
+  return fallback;
+};
+
+async function fetchJsonOrThrow<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+
+  // Read text once for better error messages; then parse if JSON
+  const text = await res.text().catch(() => "");
+  const preview = text.slice(0, 300);
+
+  const isJson = ct.includes("application/json");
+  let data: any = null;
+  if (isJson && text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // fallthrough
+    }
+  }
+
+  if (!res.ok) {
+    const msg = data?.error || data?.message || preview || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  if (!isJson) {
+    throw new Error(`响应格式错误: 期望 JSON，但得到 ${ct || "unknown"}: ${preview}`);
+  }
+  return (data as T) ?? ({} as T);
+}
+
+type HeatmapNode = { name: string; value: [number, number, number] };
+
+function mergeRegionCounts(items: RegionRank[]): RegionRank[] {
+  const m = new Map<string, number>();
+  for (const it of items) {
+    const key = normalizeRegionName((it.region || "").trim() || "未知");
+    const n = Number(it.count);
+    m.set(key, (m.get(key) || 0) + (Number.isFinite(n) ? n : 0));
+  }
+  return Array.from(m.entries()).map(([region, count]) => ({ region, count }));
+}
+
+function readPublisherAuthFromStorage(): { addr: string; role: string } {
+  if (typeof window === "undefined") return { addr: "", role: "" };
+  const addr = (localStorage.getItem("vault_pub_auth") || "").trim();
+  const role = (localStorage.getItem("vault_user_role") || "").trim();
+  return { addr, role };
+}
+
+export default function PublisherAdminLayout() {
+  const navigate = useNavigate();
+  const { apiBaseUrl } = useAppMode(); // keep as-is for UI/context; do NOT rely on it for URL building
+  const { getPublisherBalance, getErc20Balance } = useApi();
+
+  const [loading, setLoading] = useState(true);
+  const [opLoading, setOpLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [pubAddress, setPubAddress] = useState<string>("");
+
+  // backend balance（原生代币，单位由链决定）
+  const [balanceCFX, setBalanceCFX] = useState<number>(0);
+  const [balanceSymbol, setBalanceSymbol] = useState<string>("CFX");
+  const [maxDeploys, setMaxDeploys] = useState<number>(0);
+  const [balanceLoading, setBalanceLoading] = useState<boolean>(false);
+
+  // token balance (USDT)
+  const [balanceUSDT, setBalanceUSDT] = useState<number>(0);
+  const [usdtLoading, setUsdtLoading] = useState<boolean>(false);
+
+  const [bookSales, setBookSales] = useState<BookSales[]>([]);
+  const [regionRanks, setRegionRanks] = useState<RegionRank[]>([]);
+  const [totalSales, setTotalSales] = useState<number>(0);
+
+  const [nftStatsMap, setNftStatsMap] = useState<
+    Record<
+      string,
+      {
+        contract: string;
+        last_scanned_block: number;
+        minted_total: number;
+        unique_minters: number;
+        unique_real_users: number;
+      }
+    >
+  >({});
+
+  // form
+  const [bookName, setBookName] = useState<string>("");
+  const [author, setAuthor] = useState<string>("");
+  const [symbol, setSymbol] = useState<string>("");
+  const [serial, setSerial] = useState<string>("");
+  const [contractAddr, setContractAddr] = useState<string | null>(null);
+  const [count, setCount] = useState<number>(100);
+
+  // 下拉框书籍列表（real 模式）
+  const [bookListForDropdown, setBookListForDropdown] = useState<{ bookAddr: string; name?: string; symbol?: string; author?: string; serial?: string }[]>([]);
+  const [bookListLoading, setBookListLoading] = useState<boolean>(false);
+
+  // search
+  const [bookQuery, setBookQuery] = useState<string>("");
+  const [bookCandidates, setBookCandidates] = useState<any[]>([]);
+  const [bookSearchLoading, setBookSearchLoading] = useState<boolean>(false);
+  const [selectedBook, setSelectedBook] = useState<any | null>(null);
+
+  // ✅ Hackathon: 强制 real（不能进入 mock）
+  const envMode: "real" | "mock" = "real";
+  const toggleEnvMode = () => {};
+
+  // ✅ 防止历史 localStorage 残留导致未来误入
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("publisher_env_mode", "real");
+  }, []);
+
+  const storageKey = envMode === "mock" ? "publisher_mock_books" : "publisher_real_books";
+  const loadBooksFromStorage = (): BookSales[] => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw ? (JSON.parse(raw) as BookSales[]) : [];
+    } catch {
+      return [];
+    }
+  };
+  const saveBooksToStorage = (books: BookSales[]) => {
+    localStorage.setItem(storageKey, JSON.stringify(books));
+  };
+
+  // ✅ distribution (always call absolute URL) - V2 backend returns { ok, regions }
+  const fetchDistribution = async () => {
+    const url = `${origin()}/api/v1/analytics/distribution`;
+    return fetchJsonOrThrow<{ ok: boolean; regions?: HeatmapNode[]; error?: string }>(url, { method: "GET" });
+  };
+
+  // -----------------------------
+  // On-chain NFT stats (per contract)
+  // -----------------------------
+  const fetchNftStatsOne = async (contract: string) => {
+    const c = (contract || "").trim();
+    if (!isHexAddress(c)) return null;
+
+    const url = `${origin()}/api/v1/nft/stats?contract=${encodeURIComponent(c)}`;
+    const res = await fetchJsonOrThrow<{ ok: boolean; data?: any }>(url, { method: "GET" });
+
+    if (!res?.ok || !res?.data) return null;
+    return res.data as {
+      contract: string;
+      last_scanned_block: number;
+      minted_total: number;
+      unique_minters: number;
+      unique_real_users: number;
+    };
+  };
+
+  const refreshNftStats = async (contracts?: string[]) => {
+    if (envMode !== "real") return;
+
+    const list = (contracts && contracts.length ? contracts : bookSales.map((b) => b.address))
+      .map((x) => (x || "").toLowerCase())
+      .filter((x) => isHexAddress(x));
+
+    const uniq = Array.from(new Set(list));
+    if (uniq.length === 0) return;
+
+    const results = await Promise.all(uniq.map((c) => fetchNftStatsOne(c)));
+
+    setNftStatsMap((prev) => {
+      const next = { ...prev };
+      for (const r of results) {
+        if (r?.contract) next[r.contract.toLowerCase()] = r;
+      }
+      return next;
+    });
+  };
+
+  // ✅ 拉 USDT 余额（链上 RPC；只是显示用）
+  const fetchUsdtBalanceInternal = async (ownerAddr: string, tokenAddr?: string) => {
+    const owner = (ownerAddr || "").trim();
+    const rpcUrl = RPC_URL;
+    const usdtAddr = (tokenAddr || USDT_ADDRESS || "").trim();
+
+    if (!isHexAddress(owner) || !isHexAddress(usdtAddr)) {
+      setBalanceUSDT(0);
+      return;
+    }
+
+    const r = await getErc20Balance(rpcUrl, usdtAddr, owner);
+    if (r?.ok) {
+      const n = Number(r.balance);
+      setBalanceUSDT(Number.isFinite(n) ? n : 0);
+    }
+  };
+
+  // ✅ 统一拉余额（CFX + USDT）
+  const fetchPublisherBalanceDataInternal = async (preferAddress?: string, token?: { address?: string }) => {
+    const publisher = (preferAddress || pubAddress || "").trim();
+    if (!isHexAddress(publisher)) return;
+
+    setBalanceLoading(true);
+    setUsdtLoading(true);
+
+    try {
+      const codeHash = localStorage.getItem("vault_code_hash") || "";
+      const result = await getPublisherBalance(publisher, codeHash);
+      if (result.ok) {
+        setBalanceCFX(parseFloat(result.balance));
+        setBalanceSymbol(result.symbol ?? "CFX");
+        setMaxDeploys(result.maxDeploys ?? 0);
+      }
+      await fetchUsdtBalanceInternal(publisher, token?.address);
+    } finally {
+      setBalanceLoading(false);
+      setUsdtLoading(false);
+    }
+  };
+
+  const fetchPublisherBalanceData = async () => {
+    try {
+      await fetchPublisherBalanceDataInternal();
+      showToast("余额已刷新", "success");
+    } catch (e: any) {
+      showToast(e?.message || "获取余额失败", "error");
+    }
+  };
+
+  const refreshAfterTopup = async (token?: { symbol?: string; address?: string }) => {
+    await new Promise((r) => setTimeout(r, 600));
+    await fetchPublisherBalanceDataInternal(undefined, token);
+    showToast(`余额已自动刷新${token?.symbol ? `（${token.symbol}）` : ""}`, "success");
+  };
+
+  // 进入/刷新时：读取 storage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setBookSales(loadBooksFromStorage());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ 修复：默认 DEV 时 pubAddress 可能还没写入 localStorage
+  // - 监听 vault-auth-updated 事件（建议 Verify 成功后 dispatch）
+  // - 同时做短暂轮询（最多 ~3s），避免用户必须手动切换模式触发刷新
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let stopped = false;
+
+    const applyFromStorage = async (why: string) => {
+      if (stopped) return;
+      const { addr, role } = readPublisherAuthFromStorage();
+      const okRole = role === "publisher" || role === "author";
+      const okAddr = isHexAddress(addr);
+
+      if (okAddr && okRole) {
+        setPubAddress(addr);
+
+        // 首次拿到地址就拉一次余额（CFX + USDT）
+        try {
+          await fetchPublisherBalanceDataInternal(addr);
+        } catch {
+          // ignore
+        }
+      } else {
+        // 不要在 REAL 模式里生成随机地址覆盖（会导致“切一次才好”的错觉）
+        // 这里保持空，等待 Verify 写入 localStorage
+        setPubAddress("");
+      }
+    };
+
+    const onAuthUpdated = () => {
+      void applyFromStorage("vault-auth-updated");
+    };
+
+    window.addEventListener("vault-auth-updated", onAuthUpdated);
+
+    // 首次尝试
+    void applyFromStorage("mount");
+
+    // 轮询等待 Verify 写入（最多 15 次 * 200ms = 3s）
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      const { addr, role } = readPublisherAuthFromStorage();
+      if ((role === "publisher" || role === "author") && isHexAddress(addr)) {
+        void applyFromStorage("poll");
+        window.clearInterval(timer);
+        return;
+      }
+      if (tries >= 15) window.clearInterval(timer);
+    }, 200);
+
+    // 无论有没有地址，先让 UI 出来（避免一直转圈）
+    const uiTimer = window.setTimeout(() => {
+      if (!stopped) setLoading(false);
+    }, 400);
+
+    return () => {
+      stopped = true;
+      window.removeEventListener("vault-auth-updated", onAuthUpdated);
+      window.clearInterval(timer);
+      window.clearTimeout(uiTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 进入/刷新时、以及 pubAddress 就绪后：刷新仪表盘（含商品库存）；避免首次 mount 时 pubAddress 仍为空导致库存一直为 0
+  useEffect(() => {
+    fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pubAddress, envMode]);
+
+  // real search debounce
+  useEffect(() => {
+    if (envMode !== "real") return;
+
+    const q = bookQuery.trim();
+    if (q.length < 2) {
+      setBookCandidates([]);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const publisher = (pubAddress || "").trim().toLowerCase();
+        if (!isHexAddress(publisher)) {
+          setBookCandidates([]);
+          return;
+        }
+
+        setBookSearchLoading(true);
+        const url = `${origin()}/api/v1/publisher/books/search?publisher=${publisher}&q=${encodeURIComponent(
+          q
+        )}&limit=20&offset=0`;
+
+        const data = await fetchJsonOrThrow<any>(url, { method: "GET" });
+        setBookCandidates(Array.isArray(data.items) ? data.items : []);
+      } catch (e: any) {
+        setBookCandidates([]);
+        showToast(e?.message || "搜索失败", "error");
+      } finally {
+        setBookSearchLoading(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [bookQuery, envMode, pubAddress]);
+
+  const fetchBookListForDropdown = async () => {
+    if (envMode !== "real") {
+      setBookListForDropdown([]);
+      return;
+    }
+    setBookListLoading(true);
+    try {
+      const publisher = (pubAddress || "").trim().toLowerCase();
+      const qs = publisher && isHexAddress(publisher) ? `publisher=${encodeURIComponent(publisher)}&` : "";
+      const url = `${origin()}/api/v1/publisher/books?${qs}limit=200&offset=0`;
+      const data = await fetchJsonOrThrow<{ ok: boolean; items?: { bookAddr: string; name?: string; symbol?: string; author?: string; serial?: string }[] }>(url, { method: "GET" });
+      setBookListForDropdown(Array.isArray(data?.items) ? data.items : []);
+    } catch (e: any) {
+      setBookListForDropdown([]);
+      showToast(e?.message || "获取书籍列表失败", "error");
+    } finally {
+      setBookListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (envMode === "real") {
+      fetchBookListForDropdown();
+    } else {
+      setBookListForDropdown([]);
+    }
+  }, [envMode, pubAddress]);
+
+  const fetchDashboardData = async () => {
+    try {
+      if (envMode === "real") {
+        const realBooks = loadBooksFromStorage();
+        setBookSales(realBooks);
+
+        const publisher = (pubAddress || "").trim();
+        if (isHexAddress(publisher)) {
+          try {
+            const stockRes = await fetch(
+              `${origin()}/api/v1/publisher/stock?publisher=${encodeURIComponent(publisher)}`,
+              { method: "GET" }
+            );
+            const stockJson = await stockRes.json();
+            if (stockJson?.ok && Number.isFinite(stockJson?.stock)) {
+              setTotalSales(Number(stockJson.stock));
+            } else {
+              setTotalSales(0);
+            }
+          } catch {
+            setTotalSales(0);
+          }
+        } else {
+          setTotalSales(0);
+        }
+
+        const heatmapResult = await fetchDistribution();
+        if (heatmapResult?.ok && Array.isArray(heatmapResult.regions)) {
+          const raw: RegionRank[] = heatmapResult.regions.map((r: any) => {
+            const region = normalizeRegionName(String(r?.name || "").trim() || "未知");
+            const n = Number(r?.value?.[2]);
+            return { region, count: Number.isFinite(n) ? n : 0 };
+          });
+
+          const ranked = mergeRegionCounts(raw)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
+          setRegionRanks(ranked);
+        } else {
+          setRegionRanks([]);
+        }
+
+        // Refresh on-chain stats for visible books
+        await refreshNftStats(realBooks.map((b) => b.address));
+        return;
+      }
+
+      // unreachable (envMode forced real), but kept for reference
+      const salesData: BookSales[] = MOCK_BOOKS.map((book) => ({
+        address: `0x${book.id}${"0".repeat(40 - book.id.length)}`,
+        symbol: book.symbol,
+        name: book.title,
+        author: book.author,
+        sales: book.sales,
+        explorerUrl: "#",
+      }));
+
+      setBookSales(salesData);
+      setTotalSales(getTotalSales());
+
+      const ranked: RegionRank[] = MOCK_REGIONS
+        .map((r: any) => ({ region: normalizeRegionName(String(r?.name || "未知")), count: Number(r?.value?.[2]) || 0 }))
+        .sort((a: RegionRank, b: RegionRank) => b.count - a.count)
+        .slice(0, 10);
+
+      setRegionRanks(ranked);
+    } catch (e: any) {
+      console.error("获取仪表盘数据失败:", e);
+      if (envMode === "real") {
+        setBookSales(loadBooksFromStorage());
+        setTotalSales(0);
+        setRegionRanks([]);
+        showToast(e?.message || "REAL 仪表盘拉取失败：已显示空数据", "error");
+      } else {
+        setBookSales([]);
+        setTotalSales(0);
+        setRegionRanks([]);
+      }
+    }
+  };
+
+  // ✅ REAL 部署：后端完成扣费+部署（MVP：不传 publisher 时后端用系统密钥代付）
+  const handleDeployContract = async () => {
+    if (!bookName || !symbol) {
+      setError("请完整填写书籍名称和代码");
+      return;
+    }
+
+    setOpLoading(true);
+    setError(null);
+
+    try {
+      const ok = window.confirm(
+        `部署将由后端自动完成。\n\n继续？`
+      );
+      if (!ok) {
+        showToast("已取消部署", "error");
+        return;
+      }
+
+      const publisher = (pubAddress || "").trim();
+      const url = `${origin()}/api/v1/publisher/deploy-book`;
+      const result = await fetchJsonOrThrow<any>(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: bookName,
+          symbol: symbol.toUpperCase(),
+          author: author || "未知作者",
+          serial: serial || `SERIAL${Date.now()}`,
+          publisher: isHexAddress(publisher) ? publisher : "",
+        }),
+      });
+
+      if (!result?.ok) throw new Error(result?.error || "部署失败");
+
+      // 后端可能会返回 bookAddr 为空（如果没等receipt解析事件），这里做兼容
+      if (result.bookAddr) setContractAddr(result.bookAddr);
+
+      // ✅ 扣费成功后，立刻刷新 USDT 余额
+      await refreshAfterTopup({ symbol: "USDT", address: USDT_ADDRESS });
+
+      const txHash = result.txHash || "";
+      const explorerTx = txHash ? `${EXPLORER_URL}/tx/${txHash}` : "#";
+
+      const newBook: BookSales = {
+        address: result.bookAddr || "(pending)",
+        symbol: symbol.toUpperCase(),
+        name: bookName,
+        author: author || "未知作者",
+        sales: 0,
+        explorerUrl: explorerTx,
+        deployer: (pubAddress || "").trim() || undefined,
+      };
+
+      const nextBooks = [newBook, ...loadBooksFromStorage()];
+      saveBooksToStorage(nextBooks);
+      setBookSales(nextBooks);
+
+      const feeTxHash = result.feeTxHash;
+      if (feeTxHash) {
+        showToast(`已扣除 ${DEPLOY_FEE_USDT} USDT，合约部署交易已发出`, "success", feeTxHash);
+      } else {
+        showToast(`部署成功（并已扣除 ${DEPLOY_FEE_USDT} USDT）`, "success", txHash);
+      }
+    } catch (e: any) {
+      setError(e?.message || "部署失败，请检查参数");
+      showToast(e?.message || "部署失败", "error");
+    } finally {
+      setOpLoading(false);
+    }
+  };
+
+  const handleGenerateBatch = async () => {
+    if (!contractAddr) {
+      showToast("请先选择已部署的书籍合约", "error");
+      return;
+    }
+
+    const n = Number(count);
+    if (!Number.isFinite(n) || n <= 0) {
+      showToast("请输入正确的生成数量", "error");
+      return;
+    }
+    if (n > 500) {
+      showToast("单次最多生成 500 个（可分批）", "error");
+      return;
+    }
+
+    setOpLoading(true);
+    setError(null);
+
+    try {
+      const url = `${origin()}/api/v1/publisher/zip?count=${encodeURIComponent(String(n))}&contract=${encodeURIComponent(
+        contractAddr
+      )}`;
+
+      const res = await fetch(url, { method: "GET" });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw new Error(msg || `请求失败：${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const dlUrl = window.URL.createObjectURL(blob);
+
+      const cd = res.headers.get("content-disposition") || "";
+      const filename = pickFilenameFromContentDisposition(cd, `WhaleVault_Codes_${n}_${Date.now()}.zip`);
+
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(dlUrl);
+
+      showToast(`已生成并下载 ${n} 个二维码 ZIP`, "success");
+
+      // 立即乐观更新商品库存 +n，再请求接口以最新值为准
+      setTotalSales((prev) => prev + n);
+      const publisher = (pubAddress || "").trim();
+      if (isHexAddress(publisher)) {
+        try {
+          const stockRes = await fetch(
+            `${origin()}/api/v1/publisher/stock?publisher=${encodeURIComponent(publisher)}`,
+            { method: "GET" }
+          );
+          const stockJson = await stockRes.json();
+          if (stockJson?.ok && Number.isFinite(stockJson?.stock)) {
+            setTotalSales(Number(stockJson.stock));
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (e: any) {
+      const msg = (e?.message || "生成失败").toString();
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
+      setOpLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("vault_pub_auth");
+    localStorage.removeItem("vault_user_role");
+    localStorage.removeItem("vault_code_hash");
+    navigate("/bookshelf");
+  };
+
+  const ctx: PublisherOutletContext = {
+    envMode,
+    toggleEnvMode,
+    apiBaseUrl,
+    pubAddress,
+
+    balanceCFX,
+    balanceSymbol,
+    maxDeploys,
+    balanceLoading,
+    fetchPublisherBalanceData,
+
+    balanceUSDT,
+    usdtLoading,
+    refreshAfterTopup,
+
+    bookSales,
+    regionRanks,
+    totalSales,
+
+    nftStatsMap,
+    refreshNftStats,
+
+    bookName,
+    setBookName,
+    author,
+    setAuthor,
+    symbol,
+    setSymbol,
+    serial,
+    setSerial,
+    contractAddr,
+    setContractAddr,
+
+    count,
+    setCount,
+
+    bookListForDropdown,
+    bookListLoading,
+    fetchBookListForDropdown,
+
+    bookQuery,
+    setBookQuery,
+    bookCandidates,
+    bookSearchLoading,
+    selectedBook,
+    setSelectedBook,
+
+    loading,
+    opLoading,
+    error,
+
+    handleDeployContract,
+    handleGenerateBatch,
+
+    shortenAddress,
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-800">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 text-sm">{envMode === "mock" ? "加载 Mock 数据..." : "连接后端 API..."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 font-sans text-slate-800">
+      <ToastContainer />
+
+      <header className="bg-white/95 backdrop-blur-lg border-b border-slate-200 sticky top-0 z-10 px-6 py-4 shadow-sm">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-6">
+            <div>
+              <h1 className="text-xl font-serif font-black text-slate-900">
+                商家后台管理系统
+              </h1>
+
+              {/* ✅ Hackathon: 隐藏 Mock/Real 切换按钮（仍强制 REAL） */}
+              {null}
+
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-slate-600 font-mono">
+                  {(pubAddress || "").slice(0, 6)}...{(pubAddress || "").slice(-4)}
+                </p>
+                <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+                  Live API
+                </span>
+              </div>
+
+              {/* ✅ 明示费用提示（防垃圾费） */}
+              {envMode === "real" ? (
+                <div className="mt-1 text-[11px] text-slate-600">
+                  Deployment is done by the backend and <b>{DEPLOY_FEE_USDT} USDT</b> will be deducted (anti-spam fee) → Treasury{" "}
+                  {shortenAddress(TREASURY_ADDRESS)}
+                </div>
+              ) : null}
+            </div>
+
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex gap-1 bg-slate-200 p-1 rounded-lg">
+              <button
+                onClick={() => navigate("/publisher-admin/overview")}
+                className="px-3 py-2 text-xs font-medium text-slate-800 rounded-md hover:bg-white hover:text-slate-900"
+              >
+                📊 查看销量
+              </button>
+              <button
+                onClick={() => navigate("/publisher-admin/add-book")}
+                className="px-3 py-2 text-xs font-medium text-slate-800 rounded-md hover:bg-white hover:text-slate-900"
+              >
+                📚 部署商品
+              </button>
+              <button
+                onClick={() => navigate("/publisher-admin/qrcode")}
+                className="px-3 py-2 text-xs font-medium text-slate-800 rounded-md hover:bg-white hover:text-slate-900"
+              >
+                🔗 生成二维码
+              </button>
+              <button
+                onClick={() => navigate("/publisher-admin/analytics")}
+                className="px-3 py-2 text-xs font-medium text-slate-800 rounded-md hover:bg-white hover:text-slate-900"
+              >
+                🗺️ 热力分析
+              </button>
+              <button
+                onClick={() => navigate("/publisher-admin/topup")}
+                className="px-3 py-2 text-xs font-medium text-slate-800 rounded-md hover:bg-white hover:text-slate-900"
+              >
+                💳 NFT押金池
+              </button>
+              <button
+                onClick={() => navigate("/publisher-admin/nft-owners")}
+                className="px-3 py-2 text-xs font-medium text-slate-800 rounded-md hover:bg-white hover:text-slate-900"
+              >
+                📋 NFT 管理
+              </button>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-xs font-medium text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+            >
+              退出登录
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-6 text-slate-800">
+        <Outlet context={ctx} />
+      </main>
+    </div>
+  );
+}
