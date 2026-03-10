@@ -1,0 +1,762 @@
+package handlers
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/redis/go-redis/v9"
+	"github.com/skip2/go-qrcode"
+)
+
+// PublisherHandler 封装 Redis 和 Ethereum 客户端
+type PublisherHandler struct {
+	RDB         *redis.Client
+	Client      *ethclient.Client
+	FactoryAddr string // 工厂合约地址（已不在本文件中用于部署，但保留字段避免其它代码改动）
+	QRCodeBaseURL string // 二维码基础 URL
+
+	// cache RediSearch schema to avoid guessing TAG/TEXT types
+	ftSchemaOnce sync.Once
+	ftSchema     map[string]string // field -> TYPE (TAG/TEXT/NUMERIC/etc)
+	ftSchemaErr  error
+}
+
+// -----------------------------
+// 1️⃣ 生成兑换码 ZIP（读者专用二维码）
+// -----------------------------
+//
+// 支持参数：
+// - count: 1..500，默认 100
+// - book_id: 可选，32 bytes 业务ID（0x + 64 hex）
+// - contract: 可选，真实 NFT/书籍子合约地址（0x...）；✅ 前端建议用这个参数名
+// - book_addr: 可选，真实 NFT/书籍子合约地址（0x...）；✅ 兼容旧参数名
+//
+// Redis 写入：
+// - SADD vault:codes:valid <code>
+// - HSET vault:codes:book_id <code> <book_id>                  (可选)
+// - SADD vault:codes:by_book_id:<book_id> <code>               (可选)
+// - HSET vault:codes:book_addr <code> <contract>               (可选，推荐)
+// - SADD vault:codes:by_book_addr:<contract> <code>            (可选，推荐)
+// - SADD vault:nft:contracts <contract>                        (可选，推荐：用于后端自动监控所有合约统计)
+func (h *PublisherHandler) GenerateAndDownloadZip(w http.ResponseWriter, r *http.Request) {
+	countStr := r.URL.Query().Get("count")
+	count, _ := strconv.Atoi(countStr)
+	if count <= 0 || count > 500 {
+		count = 100
+	}
+
+	// ✅ 可选：绑定 book_id（32 bytes），用于让每个兑换码/二维码对应某一本书（业务ID，不是合约地址）
+	bookID := strings.TrimSpace(r.URL.Query().Get("book_id"))
+	if bookID != "" && !isHexBytesN(bookID, 32) {
+		http.Error(w, "book_id 格式不正确：需要 0x+64(hex)", http.StatusBadRequest)
+		return
+	}
+	bookID = strings.ToLower(bookID)
+
+	// ✅ 可选：绑定 book_addr（真实 NFT 合约地址 / 书籍子合约地址）
+	//
+	// 你前端目前用的是 ?contract=0x...，之前这里读的是 book_addr，导致没写入映射。
+	// 这里做兼容：优先读 contract，其次读 book_addr。
+	bookAddr := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("contract")))
+	if bookAddr == "" {
+		bookAddr = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("book_addr")))
+	}
+	if bookAddr != "" && !common.IsHexAddress(bookAddr) {
+		http.Error(w, "contract/book_addr 格式不正确：需要 0x... 地址", http.StatusBadRequest)
+		return
+	}
+
+	zipBuf := new(bytes.Buffer)
+	zipWriter := zip.NewWriter(zipBuf)
+	var generatedCodes []string
+
+	for i := 0; i < count; i++ {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			http.Error(w, "随机数生成失败", http.StatusInternalServerError)
+			return
+		}
+		code := "0x" + hex.EncodeToString(b)
+		generatedCodes = append(generatedCodes, code)
+
+		// 构造二维码 URL（读者端落地页）
+		baseURL := h.QRCodeBaseURL
+		if baseURL == "" {
+			baseURL = "http://whale3070.com" // 默认值
+		}
+		qrUrl := fmt.Sprintf("%s/vault_mint_nft/%s", baseURL, code)
+
+		// ✅ 把 book_addr 也放进二维码 URL，方便前端“完全不依赖后端补全映射”的场景
+		qs := make([]string, 0, 2)
+		if bookID != "" {
+			qs = append(qs, "book_id="+bookID)
+		}
+		if bookAddr != "" {
+			qs = append(qs, "book_addr="+bookAddr)
+		}
+		if len(qs) > 0 {
+			qrUrl = qrUrl + "?" + strings.Join(qs, "&")
+		}
+
+		qrPng, _ := qrcode.Encode(qrUrl, qrcode.Medium, 256)
+
+		f, _ := zipWriter.Create(fmt.Sprintf("qr_codes/book_code_%d.png", i+1))
+		_, _ = f.Write(qrPng)
+
+		t, _ := zipWriter.Create(fmt.Sprintf("hashes/hash_%d.txt", i+1))
+		_, _ = t.Write([]byte(code))
+	}
+
+	// 写入 Redis：读者码有效集合 + 可选 book_id / book_addr 绑定
+	ctx := r.Context()
+	pipe := h.RDB.Pipeline()
+	for _, c := range generatedCodes {
+		pipe.SAdd(ctx, "vault:codes:valid", c)
+
+		if bookID != "" {
+			pipe.HSet(ctx, "vault:codes:book_id", c, bookID)
+			pipe.SAdd(ctx, "vault:codes:by_book_id:"+bookID, c)
+		}
+
+		if bookAddr != "" {
+			// ✅ code -> book_addr（mint 目标合约）
+			pipe.HSet(ctx, "vault:codes:book_addr", c, bookAddr)
+			// ✅ 聚合：按合约查所有兑换码（可用于作废/审计）
+			pipe.SAdd(ctx, "vault:codes:by_book_addr:"+bookAddr, c)
+			// ✅ 注册到“需要监控统计的合约集合”
+			pipe.SAdd(ctx, "vault:nft:contracts", bookAddr)
+		}
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		http.Error(w, "Redis 写入失败: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 商品库存：批量生成 N 个码则该书库存 +N（仅当绑定了 contract 时）
+	if bookAddr != "" {
+		_ = h.RDB.IncrBy(ctx, "vault:book:stock:"+bookAddr, int64(count)).Err()
+	}
+
+	_ = zipWriter.Close()
+	w.Header().Set("Content-Type", "application/zip")
+
+	ts := time.Now().Format("20060102_150405") // 例如 20260206_001233
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=WhaleVault_Codes_%d_%s.zip", count, ts),
+	)
+
+	_, _ = w.Write(zipBuf.Bytes())
+}
+
+// -----------------------------
+// 2️⃣ 删除“部署书籍合约”逻辑后的兼容入口
+// -----------------------------
+func (h *PublisherHandler) CreateBook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":    false,
+		"error": "publisher.CreateBook 已废弃：请改用 /api/v1/publisher/deploy-book（当前由 FactoryHandler 处理）",
+	})
+}
+
+// GetPublisherStock 返回该 publisher 下所有书籍的“商品库存”之和（批量生成二维码时按书累加）
+// GET /api/v1/publisher/stock?publisher=0x...
+func (h *PublisherHandler) GetPublisherStock(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	publisher := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("publisher")))
+	if publisher != "" && !common.IsHexAddress(publisher) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "publisher format invalid"})
+		return
+	}
+	if publisher == "" {
+		publisher = getBackendAddressFromEnv()
+	}
+	ctx := r.Context()
+	zkey := "vault:publisher:books:" + publisher
+	total, err := h.RDB.ZCard(ctx, zkey).Result()
+	if err == nil && total == 0 {
+		zkey = "vault:publisher:books:z:" + publisher
+		total, err = h.RDB.ZCard(ctx, zkey).Result()
+	}
+	if err == nil && total == 0 {
+		backendAddr := getBackendAddressFromEnv()
+		if backendAddr != "" && backendAddr != publisher {
+			zkey = "vault:publisher:books:" + backendAddr
+			total, _ = h.RDB.ZCard(ctx, zkey).Result()
+			if total == 0 {
+				zkey = "vault:publisher:books:z:" + backendAddr
+				total, _ = h.RDB.ZCard(ctx, zkey).Result()
+			}
+		}
+	}
+	var stock int64
+	if total > 0 {
+		addrs, _ := h.RDB.ZRevRange(ctx, zkey, 0, -1).Result()
+		for _, addr := range addrs {
+			addr = strings.ToLower(addr)
+			n, _ := h.RDB.Get(ctx, "vault:book:stock:"+addr).Int64()
+			stock += n
+		}
+	}
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "stock": stock})
+}
+
+// indexDeployedBook writes a fast index for publisher -> books (ZSET) and per-book meta (HASH).
+func (h *PublisherHandler) indexDeployedBook(ctx context.Context, publisherLower, bookAddrLower string, reqName, reqSymbol, reqAuthor, reqSerial, txHash string) {
+	zkey := "vault:publisher:books:z:" + publisherLower
+	_ = h.RDB.ZAdd(ctx, zkey, redis.Z{
+		Score:  float64(time.Now().Unix()),
+		Member: bookAddrLower,
+	}).Err()
+
+	mkey := "vault:book:meta:" + bookAddrLower
+	_ = h.RDB.HSet(ctx, mkey, map[string]interface{}{
+		"name":      reqName,
+		"symbol":    reqSymbol,
+		"author":    reqAuthor,
+		"serial":    reqSerial,
+		"publisher": publisherLower,
+		"txHash":    txHash,
+		"createdAt": time.Now().Unix(),
+	}).Err()
+}
+
+type PublisherBookItem struct {
+	BookAddr  string `json:"bookAddr"`
+	Name      string `json:"name,omitempty"`
+	Symbol    string `json:"symbol,omitempty"`
+	Author    string `json:"author,omitempty"`
+	Serial    string `json:"serial,omitempty"`
+	Publisher string `json:"publisher,omitempty"`
+	TxHash    string `json:"txHash,omitempty"`
+	CreatedAt int64  `json:"createdAt,omitempty"`
+}
+
+// getBackendAddressFromEnv 从 BACKEND_PRIVATE_KEY 推导地址（与 factory 部署时写入的 publisher 一致）
+func getBackendAddressFromEnv() string {
+	hexKey := strings.TrimSpace(os.Getenv("BACKEND_PRIVATE_KEY"))
+	hexKey = strings.TrimPrefix(strings.ToLower(hexKey), "0x")
+	if hexKey == "" {
+		return ""
+	}
+	pk, err := crypto.HexToECDSA(hexKey)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(crypto.PubkeyToAddress(pk.PublicKey).Hex())
+}
+
+// GetPublisherBooks
+// GET /api/v1/publisher/books?publisher=0x...&offset=0&limit=50
+// 若请求的 publisher 下无书，则用后端地址再查一次（MVP 部署时代付写入的是 backend 地址）
+func (h *PublisherHandler) GetPublisherBooks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	publisher := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("publisher")))
+	if publisher != "" && !common.IsHexAddress(publisher) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "publisher format invalid"})
+		return
+	}
+	// 未传或空时用后端地址（MVP：任何人可看到通过后端代付部署的书籍列表）
+	if publisher == "" {
+		publisher = getBackendAddressFromEnv()
+	}
+	if publisher == "" {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true, "publisher": "", "total": 0, "items": []PublisherBookItem{},
+		})
+		return
+	}
+
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	ctx := r.Context()
+	// 与 factory saveBookMeta 一致：vault:publisher:books:{publisher}（无 z 后缀）
+	zkey := "vault:publisher:books:" + publisher
+	total, err := h.RDB.ZCard(ctx, zkey).Result()
+	if err == nil && total == 0 {
+		// 兼容旧数据：曾用 vault:publisher:books:z:
+		zkey = "vault:publisher:books:z:" + publisher
+		total, err = h.RDB.ZCard(ctx, zkey).Result()
+	}
+	// MVP：若当前 publisher 下无书，则用后端地址再查一次（部署时代付写入的是 backend 地址）
+	if err == nil && total == 0 {
+		backendAddr := getBackendAddressFromEnv()
+		if backendAddr != "" && backendAddr != publisher {
+			zkey = "vault:publisher:books:" + backendAddr
+			total, err = h.RDB.ZCard(ctx, zkey).Result()
+			if err == nil && total == 0 {
+				zkey = "vault:publisher:books:z:" + backendAddr
+				total, err = h.RDB.ZCard(ctx, zkey).Result()
+			}
+		}
+	}
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+	if total == 0 {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true, "publisher": publisher, "total": 0, "items": []PublisherBookItem{},
+		})
+		return
+	}
+
+	start := int64(offset)
+	stop := int64(offset + limit - 1)
+	addrs, err := h.RDB.ZRevRange(ctx, zkey, start, stop).Result()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	pipe := h.RDB.Pipeline()
+	cmds := make([]*redis.MapStringStringCmd, 0, len(addrs))
+	for _, a := range addrs {
+		cmds = append(cmds, pipe.HGetAll(ctx, "vault:book:meta:"+strings.ToLower(a)))
+	}
+	_, _ = pipe.Exec(ctx)
+
+	items := make([]PublisherBookItem, 0, len(addrs))
+	for i, a := range addrs {
+		meta := map[string]string{}
+		if i < len(cmds) {
+			meta = cmds[i].Val()
+		}
+		it := PublisherBookItem{
+			BookAddr:  strings.ToLower(a),
+			Name:      meta["name"],
+			Symbol:    meta["symbol"],
+			Author:    meta["author"],
+			Serial:    meta["serial"],
+			Publisher: meta["publisher"],
+			TxHash:    meta["txHash"],
+		}
+		if v := meta["createdAt"]; v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				it.CreatedAt = n
+			}
+		}
+		items = append(items, it)
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok": true, "publisher": publisher, "total": total, "items": items,
+	})
+}
+
+// -----------------------------
+// ✅ RediSearch schema-aware query builder (no more Syntax error)
+// -----------------------------
+
+// normalizeFTText: 只保留字母/数字/_；其他字符一律转成空格并压缩空格。
+// 用于 TEXT 查询，保证永远不会把 RediSearch parser 炸掉。
+func normalizeFTText(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastSpace := false
+	for _, r := range s {
+		// 允许：字母/数字/_/以及所有非ASCII字符（中文等）
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) || r > 127 {
+			b.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+
+		// 其余全部转空格，避免炸 RediSearch parser（例如: (){}[]|@:" 等）
+		if !lastSpace {
+			b.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	out = strings.Join(strings.Fields(out), " ")
+	return out
+}
+
+// normalizeFTTag: TAG 值只保留字母/数字/_；其余全部移除。
+func normalizeFTTag(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func (h *PublisherHandler) loadFTSchemaOnce(ctx context.Context) {
+	h.ftSchemaOnce.Do(func() {
+		h.ftSchema = map[string]string{}
+
+		res, err := h.RDB.Do(ctx, "FT.INFO", "idx:books").Result()
+		if err != nil {
+			h.ftSchemaErr = err
+			return
+		}
+
+		// FT.INFO returns alternating key/value array
+		top, ok := res.([]interface{})
+		if !ok {
+			return
+		}
+		var attrs interface{}
+		for i := 0; i+1 < len(top); i += 2 {
+			k, _ := top[i].(string)
+			if k == "attributes" {
+				attrs = top[i+1]
+				break
+			}
+		}
+		alist, ok := attrs.([]interface{})
+		if !ok {
+			return
+		}
+		for _, a := range alist {
+			entry, ok := a.([]interface{})
+			if !ok {
+				continue
+			}
+			var fieldName, fieldType string
+			for j := 0; j+1 < len(entry); j += 2 {
+				kk, _ := entry[j].(string)
+				switch kk {
+				case "attribute", "identifier":
+					if fieldName == "" {
+						if vv, ok := entry[j+1].(string); ok {
+							fieldName = vv
+						}
+					}
+				case "type":
+					if vv, ok := entry[j+1].(string); ok {
+						fieldType = strings.ToUpper(vv)
+					}
+				}
+			}
+			if fieldName != "" && fieldType != "" {
+				h.ftSchema[fieldName] = fieldType
+			}
+		}
+	})
+}
+
+func (h *PublisherHandler) fieldType(ctx context.Context, field string, fallback string) string {
+	h.loadFTSchemaOnce(ctx)
+	if t, ok := h.ftSchema[field]; ok && t != "" {
+		return t
+	}
+	return fallback
+}
+
+// SearchPublisherBooks
+func (h *PublisherHandler) SearchPublisherBooks(w http.ResponseWriter, r *http.Request) {
+	debug := r.URL.Query().Get("debug") == "1"
+
+	w.Header().Set("Content-Type", "application/json")
+	ctx := r.Context()
+
+	publisher := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("publisher")))
+	qRaw := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	if publisher == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "publisher is required"})
+		return
+	}
+	if !common.IsHexAddress(publisher) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "publisher format invalid"})
+		return
+	}
+
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	qText := normalizeFTText(qRaw)
+	qTag := normalizeFTTag(qRaw)
+
+	if len([]rune(qText)) < 2 && len([]rune(qTag)) < 2 {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":        true,
+			"publisher": publisher,
+			"q":         qRaw,
+			"total":     0,
+			"items":     []map[string]interface{}{},
+		})
+		return
+	}
+
+	// TEXT expr: t1* t2*
+	var textExpr string
+	if qText != "" {
+		toks := strings.Fields(qText)
+		parts := make([]string, 0, len(toks))
+		for _, t := range toks {
+			parts = append(parts, t+"*")
+		}
+		textExpr = strings.Join(parts, " ")
+	}
+
+	// Determine field types from FT.INFO (fallbacks match your comment schema)
+	pubType := h.fieldType(ctx, "publisher", "TAG")
+	nameType := h.fieldType(ctx, "name", "TEXT")
+	authorType := h.fieldType(ctx, "author", "TEXT")
+	symbolType := h.fieldType(ctx, "symbol", "TAG")
+	serialType := h.fieldType(ctx, "serial", "TAG")
+
+	buildField := func(field string, fType string, textExpr string, tagVal string) (string, bool) {
+		t := strings.ToUpper(fType)
+		switch t {
+		case "TAG":
+			if tagVal == "" {
+				return "", false
+			}
+			return fmt.Sprintf("(@%s:{%s*})", field, tagVal), true
+		case "TEXT":
+			if textExpr == "" {
+				return "", false
+			}
+			return fmt.Sprintf("(@%s:(%s))", field, textExpr), true
+		case "NUMERIC":
+			if tagVal == "" {
+				return "", false
+			}
+			if !isAllDigits(tagVal) {
+				return "", false
+			}
+			return fmt.Sprintf("(@%s:[%s %s])", field, tagVal, tagVal), true
+		default:
+			if textExpr == "" {
+				return "", false
+			}
+			return fmt.Sprintf("(@%s:(%s))", field, textExpr), true
+		}
+	}
+
+	innerParts := make([]string, 0, 6)
+
+	if textExpr != "" {
+		if clause, ok := buildField("name", nameType, textExpr, qTag); ok {
+			innerParts = append(innerParts, clause)
+		} else {
+			innerParts = append(innerParts, fmt.Sprintf("(@name:(%s))", textExpr))
+		}
+		if clause, ok := buildField("author", authorType, textExpr, qTag); ok {
+			innerParts = append(innerParts, clause)
+		} else {
+			innerParts = append(innerParts, fmt.Sprintf("(@author:(%s))", textExpr))
+		}
+	}
+
+	if clause, ok := buildField("symbol", symbolType, textExpr, qTag); ok {
+		innerParts = append(innerParts, clause)
+	}
+	if clause, ok := buildField("serial", serialType, textExpr, qTag); ok {
+		innerParts = append(innerParts, clause)
+	}
+
+	if len(innerParts) == 0 {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":        true,
+			"publisher": publisher,
+			"q":         qRaw,
+			"total":     0,
+			"items":     []map[string]interface{}{},
+		})
+		return
+	}
+
+	inner := strings.Join(innerParts, " | ")
+
+	var pubClause string
+	if strings.ToUpper(pubType) == "TAG" {
+		pubClause = fmt.Sprintf("@publisher:{%s}", publisher)
+	} else {
+		pubClause = fmt.Sprintf("@publisher:(%s)", publisher)
+	}
+
+	query := fmt.Sprintf("%s ( %s )", pubClause, inner)
+
+	// 只有 debug=1 才做全量查询/回传 debug 字段（避免泄漏 & 降低开销）
+	var (
+		allResType string
+		allTotal   int64
+		allErrStr  string
+	)
+	if debug {
+		allRes, allErr := h.RDB.Do(ctx,
+			"FT.SEARCH", "idx:books", "*",
+			"LIMIT", 0, 1,
+		).Result()
+		allResType = fmt.Sprintf("%T", allRes)
+		allTotal, _, _ = parseFTSearchResult(allRes)
+		if allErr != nil {
+			allErrStr = allErr.Error()
+		}
+	}
+
+	res, err := h.RDB.Do(ctx,
+		"FT.SEARCH", "idx:books", query,
+		"SORTBY", "createdAt", "DESC",
+		"LIMIT", offset, limit,
+		"RETURN", "7", "name", "author", "symbol", "serial", "publisher", "createdAt", "txHash",
+	).Result()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		out := map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+			"query": query,
+		}
+		if debug {
+			if h.ftSchemaErr != nil {
+				out["schemaError"] = h.ftSchemaErr.Error()
+			} else if len(h.ftSchema) > 0 {
+				out["schema"] = h.ftSchema
+			}
+		}
+		_ = json.NewEncoder(w).Encode(out)
+		return
+	}
+
+	total, items, parseErr := parseFTSearchResult(res)
+	if parseErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": parseErr.Error()})
+		return
+	}
+
+	out := map[string]interface{}{
+		"ok":        true,
+		"publisher": publisher,
+		"q":         qRaw,
+		"total":     total,
+		"items":     items,
+	}
+
+	if debug {
+		out["debugQuery"] = query
+		out["debugQText"] = qText
+		out["debugQTag"] = qTag
+		out["debugTextExpr"] = textExpr
+		out["debugAllTotal"] = allTotal
+		out["debugAllErr"] = allErrStr
+		out["debugAllResType"] = allResType
+	}
+
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseFTSearchResult parses FT.SEARCH result:
+// [total, docId1, [field, value, ...], docId2, [field, value, ...], ...]
+func parseFTSearchResult(res interface{}) (int64, []map[string]interface{}, error) {
+	arr, ok := res.([]interface{})
+	if !ok || len(arr) == 0 {
+		return 0, []map[string]interface{}{}, nil
+	}
+
+	var total int64
+	switch v := arr[0].(type) {
+	case int64:
+		total = v
+	case int:
+		total = int64(v)
+	case string:
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			total = n
+		}
+	}
+
+	items := make([]map[string]interface{}, 0)
+	for i := 1; i+1 < len(arr); i += 2 {
+		docID, _ := arr[i].(string)
+		fields := arr[i+1]
+
+		item := map[string]interface{}{}
+		if strings.HasPrefix(docID, "vault:book:meta:") {
+			item["bookAddr"] = strings.TrimPrefix(docID, "vault:book:meta:")
+		} else {
+			item["bookAddr"] = docID
+		}
+
+		if kv, ok := fields.([]interface{}); ok {
+			for j := 0; j+1 < len(kv); j += 2 {
+				k, _ := kv[j].(string)
+				v := kv[j+1]
+				switch vv := v.(type) {
+				case []byte:
+					item[k] = string(vv)
+				default:
+					item[k] = vv
+				}
+			}
+		}
+		items = append(items, item)
+	}
+
+	return total, items, nil
+}
+
+// isHexBytesN checks 0x-prefixed hex string with exact N bytes.
+func isHexBytesN(s string, n int) bool {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "0x")
+	if len(s) != n*2 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}

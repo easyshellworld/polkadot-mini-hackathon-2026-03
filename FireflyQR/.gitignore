@@ -1,0 +1,21 @@
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Frontend
+fronted/node_modules/
+fronted/dist/
+# Large media (GitHub limit 100MB)
+fronted/public/*.mp4
+fronted/public/whale-vault-pitch-deck.mp4
+
+# Backend
+backend/main
+*.exe
+
+# IDE / OS
+.idea/
+.DS_Store
+*.swp
+*.log

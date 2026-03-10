@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 白酒防伪溯源 · 防二次灌装 — 主题变量 */
+:root {
+  color-scheme: light;
+  --background: 250 248 245; /* #FAF8F5 米白 */
+  --foreground: 44 24 16;     /* #2C1810 深褐 */
+  --card: 255 255 255;
+  --card-foreground: 44 24 16;
+  --primary: 139 41 66;      /* #8B2942 酒红 */
+  --primary-foreground: 255 255 255;
+  --secondary: 245 240 232;   /* #F5F0E8 */
+  --secondary-foreground: 44 24 16;
+  --muted: 245 240 232;
+  --muted-foreground: 107 90 82;
+  --accent: 201 162 39;      /* #C9A227 金 */
+  --accent-foreground: 44 24 16;
+  --destructive: 185 28 28;
+  --border: 232 224 213;      /* #E8E0D5 */
+  --ring: 139 41 66;
+}
+
+body {
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: linear-gradient(160deg, #FAF8F5 0%, #F5F0E8 50%, #EDE6DC 100%);
+  min-height: 100vh;
+  color: #2C1810;
+}
+
+/* 标题使用衬线体（稳重、可信） */
+h1, h2, h3, .font-display {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5F0E8;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4C4B0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C9A227;
+}
+
+/* 成功页沙漏动画：沙从上漏到下 */
+@keyframes hourglass-drain {
+  0% { opacity: 0.95; transform: scaleY(1); }
+  45% { opacity: 0.95; transform: scaleY(1); }
+  55% { opacity: 0.2; transform: scaleY(0.1); }
+  100% { opacity: 0.2; transform: scaleY(0.1); }
+}
+@keyframes hourglass-fill {
+  0% { opacity: 0.2; transform: scaleY(0.1); }
+  45% { opacity: 0.2; transform: scaleY(0.1); }
+  55% { opacity: 0.95; transform: scaleY(1); }
+  100% { opacity: 0.95; transform: scaleY(1); }
+}
+.hourglass-sand-top {
+  transform-origin: 50% 100%;
+  animation: hourglass-drain 4s ease-in-out infinite;
+}
+.hourglass-sand-bottom {
+  transform-origin: 50% 0%;
+  animation: hourglass-fill 4s ease-in-out infinite;
+}
