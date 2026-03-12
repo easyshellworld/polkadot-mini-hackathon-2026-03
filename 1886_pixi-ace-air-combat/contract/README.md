@@ -55,3 +55,5 @@ After setting the variable, you can run the deployment with the Sepolia network:
 ```shell
 npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
 ```
+
+- AceAirCombatModule#AceAirCombat - 0xEB6900100604AFBb594F56ACa59EB89E5bD1107d
