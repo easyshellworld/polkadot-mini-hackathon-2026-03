@@ -5,7 +5,7 @@ import { PowerUp } from "./PowerUp";
 import { Explosion } from "./Explosion";
 import { Background } from "./Background";
 import { CollisionSystem } from "./CollisionSystem";
-import type { EnemyType, GameState, KeyState } from "./types";
+import type { EnemyType, GameState, KeyState, PlaneStats } from "./types";
 import { playShoot, playExplosion, playPowerUp } from "../utils/audio";
 
 const WAVE_SIZES = [3, 5, 7, 9, 12]; // enemies per wave, then repeats with scale
@@ -37,12 +37,12 @@ export class GameEngine {
   paused: boolean = false;
   over: boolean = false;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, planeStats?: PlaneStats) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not get 2D context");
     this.ctx = ctx;
-    this.player = new Player(canvas.width, canvas.height);
+    this.player = new Player(canvas.width, canvas.height, planeStats);
     this.background = new Background(canvas.width, canvas.height);
     this.collision = new CollisionSystem();
     this.startWave(1);

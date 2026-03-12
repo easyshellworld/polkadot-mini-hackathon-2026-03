@@ -97,3 +97,10 @@ export interface KeyState {
   right: boolean;
   shoot: boolean;
 }
+
+// On-chain plane stats (from smart contract)
+export interface PlaneStats {
+  moveSpeed: bigint;
+  attackSpeed: bigint;
+  firepower: bigint;
+}

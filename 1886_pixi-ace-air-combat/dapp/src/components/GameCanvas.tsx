@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { GameEngine } from "../game/GameEngine";
 import { useGameLoop } from "../hooks/useGameLoop";
 import { useKeyboard } from "../hooks/useKeyboard";
-import type { GameState } from "../game/types";
+import type { GameState, PlaneStats } from "../game/types";
 import HUD from "./HUD";
 import PauseOverlay from "./PauseOverlay";
 
 interface GameCanvasProps {
   onGameOver: (state: GameState) => void;
+  planeStats?: PlaneStats;
 }
 
 const INITIAL_HUD_STATE: GameState = {
@@ -22,7 +23,7 @@ const INITIAL_HUD_STATE: GameState = {
   over: false,
 };
 
-function GameCanvas({ onGameOver }: GameCanvasProps) {
+function GameCanvas({ onGameOver, planeStats }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const keysRef = useKeyboard();
@@ -30,14 +31,16 @@ function GameCanvas({ onGameOver }: GameCanvasProps) {
   const [paused, setPaused] = useState(false);
   const gameOverCalledRef = useRef(false);
 
-  // Initialize engine when canvas is ready
+  // Initialize engine when canvas is ready.
+  // planeStats is intentionally read once at mount time so the game engine
+  // is constructed with the stats that were active when the player hit "start".
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    engineRef.current = new GameEngine(canvas);
+    engineRef.current = new GameEngine(canvas, planeStats);
     gameOverCalledRef.current = false;
 
     const handleResize = () => {
@@ -50,6 +53,7 @@ function GameCanvas({ onGameOver }: GameCanvasProps) {
       window.removeEventListener("resize", handleResize);
       engineRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Pause on ESC

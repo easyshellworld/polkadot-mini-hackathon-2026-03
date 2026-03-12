@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ReactNode } from "react";
 import { useConnection } from "wagmi";
+import PlayerProfile from "./PlayerProfile";
 
 interface StartScreenProps {
   onStart: (isConnected: boolean) => void;
@@ -29,7 +30,7 @@ const STARS = Array.from({ length: 60 }, (_, i) => ({
 }));
 
 function StartScreen({ onStart, children, open, setOpen }: StartScreenProps) {
-  const { isConnected } = useConnection();
+  const { isConnected, address } = useConnection();
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center bg-black">
@@ -80,6 +81,13 @@ function StartScreen({ onStart, children, open, setOpen }: StartScreenProps) {
 
       {/* Divider */}
       <div className="my-6 h-px w-64 bg-linear-to-r from-transparent via-cyan-500 to-transparent" />
+
+      {/* Player profile (shown when wallet connected) */}
+      {isConnected && address && (
+        <div className="mb-6 w-80">
+          <PlayerProfile address={address} />
+        </div>
+      )}
 
       {/* Controls */}
       <div className="mb-8 grid grid-cols-2 gap-6 text-center">

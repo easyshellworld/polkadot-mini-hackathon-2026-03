@@ -1,11 +1,33 @@
+import { useState } from "react";
+import { formatEther, type Address } from "viem";
 import type { GameResult } from "../App";
+import { usePlayerInfo, usePrizePool, type PlayerContractData } from "../hooks/useContract";
+import PlaneUpgradeModal from "./PlaneUpgradeModal";
+import type { PlaneStats } from "../game/types";
 
 interface GameOverScreenProps {
   result: GameResult;
   onRestart: () => void;
+  address?: Address;
 }
 
-function GameOverScreen({ result, onRestart }: GameOverScreenProps) {
+function GameOverScreen({ result, onRestart, address }: GameOverScreenProps) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const { data: playerData, refetch: refetchPlayer } = usePlayerInfo(address);
+  const { data: prizePoolData } = usePrizePool();
+
+  const plane = playerData
+    ? (playerData as PlayerContractData)[2]
+    : { moveSpeed: 0n, attackSpeed: 0n, firepower: 0n };
+
+  const currentStats: PlaneStats = {
+    moveSpeed: plane?.moveSpeed ?? 0n,
+    attackSpeed: plane?.attackSpeed ?? 0n,
+    firepower: plane?.firepower ?? 0n,
+  };
+
+  const prizePool = (prizePoolData as bigint | undefined) ?? 0n;
   return (
     <div className="flex h-full w-full flex-col items-center justify-center bg-black">
       {/* Background overlay */}
@@ -80,6 +102,39 @@ function GameOverScreen({ result, onRestart }: GameOverScreenProps) {
           </div>
         </div>
 
+        {/* Plane stats + upgrade (shown when connected) */}
+        {address && (
+          <div className="mb-6 w-72 rounded border border-cyan-800 bg-gray-950/80 p-3">
+            <div className="mb-2 font-mono text-xs tracking-widest text-cyan-500 uppercase">
+              Plane Stats
+            </div>
+            <div className="mb-3 grid grid-cols-3 gap-2 font-mono text-xs text-center">
+              <div>
+                <div className="text-blue-400">Speed</div>
+                <div className="text-white">Lv.{currentStats.moveSpeed.toString()}</div>
+              </div>
+              <div>
+                <div className="text-yellow-400">Atk Spd</div>
+                <div className="text-white">Lv.{currentStats.attackSpeed.toString()}</div>
+              </div>
+              <div>
+                <div className="text-red-400">Firepower</div>
+                <div className="text-white">Lv.{currentStats.firepower.toString()}</div>
+              </div>
+            </div>
+            <div className="mb-2 flex justify-between font-mono text-xs">
+              <span className="text-gray-400">Prize Pool</span>
+              <span className="text-cyan-400">{formatEther(prizePool)} PAS</span>
+            </div>
+            <button
+              onClick={() => setUpgradeOpen(true)}
+              className="w-full cursor-pointer rounded border border-cyan-500 bg-transparent py-1.5 font-mono text-xs font-bold tracking-[0.2em] text-cyan-400 uppercase transition-all hover:bg-cyan-500 hover:text-black"
+            >
+              ✈ Upgrade Plane
+            </button>
+          </div>
+        )}
+
         {/* Restart button */}
         <button
           onClick={onRestart}
@@ -89,6 +144,15 @@ function GameOverScreen({ result, onRestart }: GameOverScreenProps) {
           ↺ RETRY
         </button>
       </div>
+
+      {address && (
+        <PlaneUpgradeModal
+          open={upgradeOpen}
+          onClose={() => setUpgradeOpen(false)}
+          currentStats={currentStats}
+          onSuccess={() => refetchPlayer()}
+        />
+      )}
     </div>
   );
 }

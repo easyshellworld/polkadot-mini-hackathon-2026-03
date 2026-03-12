@@ -1,9 +1,13 @@
 import type { PlayerData } from "./types";
-import type { KeyState } from "./types";
+import type { KeyState, PlaneStats } from "./types";
 import { Bullet } from "./Bullet";
 
 const BASE_SPEED = 5;
 const BASE_SHOOT_INTERVAL = 0.25; // seconds
+// Bonus per upgrade level
+const SPEED_BONUS_PER_LEVEL = 0.5;
+const SHOOT_INTERVAL_REDUCTION_PER_LEVEL = 0.02; // seconds faster per level
+const DAMAGE_BONUS_PER_LEVEL = 0.5;
 
 export class Player implements PlayerData {
   position: { x: number; y: number };
@@ -22,10 +26,13 @@ export class Player implements PlayerData {
   speed: number;
   invincibleTimer: number;
 
+  // Per-bullet damage (boosted by firepower upgrades)
+  private bulletDamage: number;
+
   private canvasWidth: number;
   private canvasHeight: number;
 
-  constructor(canvasWidth: number, canvasHeight: number) {
+  constructor(canvasWidth: number, canvasHeight: number, planeStats?: PlaneStats) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
     this.position = { x: canvasWidth / 2, y: canvasHeight - 100 };
@@ -40,9 +47,19 @@ export class Player implements PlayerData {
     this.rapidFireActive = false;
     this.rapidFireTimer = 0;
     this.shootTimer = 0;
-    this.shootInterval = BASE_SHOOT_INTERVAL;
-    this.speed = BASE_SPEED;
     this.invincibleTimer = 0;
+
+    // Apply on-chain plane stats
+    const moveLevel = planeStats ? Number(planeStats.moveSpeed) : 0;
+    const atkLevel = planeStats ? Number(planeStats.attackSpeed) : 0;
+    const fpLevel = planeStats ? Number(planeStats.firepower) : 0;
+
+    this.speed = BASE_SPEED + moveLevel * SPEED_BONUS_PER_LEVEL;
+    this.shootInterval = Math.max(
+      0.05,
+      BASE_SHOOT_INTERVAL - atkLevel * SHOOT_INTERVAL_REDUCTION_PER_LEVEL,
+    );
+    this.bulletDamage = 1 + fpLevel * DAMAGE_BONUS_PER_LEVEL;
   }
 
   resize(canvasWidth: number, canvasHeight: number) {
@@ -92,7 +109,7 @@ export class Player implements PlayerData {
         : this.shootInterval;
       this.shootTimer = interval;
       bullets.push(
-        new Bullet(this.position.x, this.position.y - hh, 0, -10, "player", 1),
+        new Bullet(this.position.x, this.position.y - hh, 0, -10, "player", this.bulletDamage),
       );
       // Spread shot when rapid fire
       if (this.rapidFireActive) {
@@ -103,7 +120,7 @@ export class Player implements PlayerData {
             -0.5,
             -10,
             "player",
-            1,
+            this.bulletDamage,
           ),
         );
         bullets.push(
@@ -113,7 +130,7 @@ export class Player implements PlayerData {
             0.5,
             -10,
             "player",
-            1,
+            this.bulletDamage,
           ),
         );
       }

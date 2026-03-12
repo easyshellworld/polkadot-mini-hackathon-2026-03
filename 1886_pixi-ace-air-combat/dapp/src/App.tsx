@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { WagmiProvider, useConnection } from "wagmi";
+import { type Address } from "viem";
 import { Connection } from "./components/Connection";
 import GameCanvas from "./components/GameCanvas";
 import GameOverScreen from "./components/GameOverScreen";
 import StartScreen from "./components/StartScreen";
 import { WalletOptions } from "./components/WalletOptions";
 import { config } from "./config";
-import type { GameState } from "./game/types";
+import type { GameState, PlaneStats } from "./game/types";
+import { usePlayerInfo, type PlayerContractData } from "./hooks/useContract";
 
 export type AppScreen = "start" | "playing" | "gameover";
 
@@ -25,7 +27,8 @@ function ConnectWallet() {
   return <WalletOptions />;
 }
 
-export default function App() {
+function AppInner() {
+  const { isConnected, address } = useConnection();
   const [screen, setScreen] = useState<AppScreen>("start");
   const [gameResult, setGameResult] = useState<GameResult>({
     score: 0,
@@ -34,8 +37,25 @@ export default function App() {
   });
   const [open, setOpen] = useState(false);
 
-  const handleStart = (isConnected: boolean) => {
-    if (!isConnected) {
+  // Read on-chain plane stats for current player
+  const { data: playerData } = usePlayerInfo(
+    isConnected ? (address as Address) : undefined,
+  );
+
+  const plane = playerData
+    ? (playerData as PlayerContractData)[2]
+    : undefined;
+
+  const planeStats: PlaneStats | undefined = plane
+    ? {
+        moveSpeed: plane.moveSpeed,
+        attackSpeed: plane.attackSpeed,
+        firepower: plane.firepower,
+      }
+    : undefined;
+
+  const handleStart = (connected: boolean) => {
+    if (!connected) {
       setOpen(true);
       return;
     }
@@ -48,20 +68,33 @@ export default function App() {
   };
 
   const handleRestart = () => setScreen("playing");
+
+  return (
+    <div className="relative h-screen w-screen overflow-hidden bg-black">
+      {screen === "start" && (
+        <StartScreen onStart={handleStart} open={open} setOpen={setOpen}>
+          <ConnectWallet />
+        </StartScreen>
+      )}
+      {screen === "playing" && (
+        <GameCanvas onGameOver={handleGameOver} planeStats={planeStats} />
+      )}
+      {screen === "gameover" && (
+        <GameOverScreen
+          result={gameResult}
+          onRestart={handleRestart}
+          address={isConnected ? (address as Address) : undefined}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function App() {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <div className="relative h-screen w-screen overflow-hidden bg-black">
-          {screen === "start" && (
-            <StartScreen onStart={handleStart} open={open} setOpen={setOpen}>
-              <ConnectWallet />
-            </StartScreen>
-          )}
-          {screen === "playing" && <GameCanvas onGameOver={handleGameOver} />}
-          {screen === "gameover" && (
-            <GameOverScreen result={gameResult} onRestart={handleRestart} />
-          )}
-        </div>
+        <AppInner />
       </QueryClientProvider>
     </WagmiProvider>
   );
