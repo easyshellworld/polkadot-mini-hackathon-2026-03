@@ -1,0 +1,39 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-270e779846e0a3afeb590954f8fb5e9806303ec7",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/AceAirCombat.sol": "project/contracts/AceAirCombat.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/AceAirCombat.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract AceAirCombat {\n    struct Plane {\n        uint256 moveSpeed;\n        uint256 attackSpeed;\n        uint256 firepower;\n    }\n\n    struct Player {\n        bool registered;\n        uint256 score;\n        Plane plane;\n    }\n\n    address public owner;\n    uint256 public prizePool;\n    bool public prizePoolInitialized;\n\n    mapping(address => Player) public players;\n\n    /// @notice Cost in wei per single attribute point upgrade.\n    ///         Each point in the delta values costs UPGRADE_COST_PER_POINT wei.\n    ///         e.g. upgrading moveSpeed by 3 and firepower by 5 costs 8 * UPGRADE_COST_PER_POINT.\n    uint256 public constant UPGRADE_COST_PER_POINT = 0.001 ether;\n\n    event PrizePoolInitialized(address indexed initializer, uint256 amount);\n    event PlaneUpgraded(\n        address indexed player,\n        uint256 moveSpeed,\n        uint256 attackSpeed,\n        uint256 firepower,\n        uint256 totalCost\n    );\n\n    modifier onlyOwner() {\n        require(msg.sender == owner, \"Not the contract owner\");\n        _;\n    }\n\n    constructor() {\n        owner = msg.sender;\n    }\n\n    /// @notice Initialize the prize pool by depositing ETH into the contract.\n    ///         Can only be called once by the owner.\n    function initializePrizePool() external payable onlyOwner {\n        require(!prizePoolInitialized, \"Prize pool already initialized\");\n        require(msg.value > 0, \"Must deposit a positive amount\");\n\n        prizePool = msg.value;\n        prizePoolInitialized = true;\n\n        emit PrizePoolInitialized(msg.sender, msg.value);\n    }\n\n    function registerPlayer() public {\n        require(!players[msg.sender].registered, \"Player already registered\");\n        players[msg.sender] = Player(true, 0, Plane(1, 1, 1));\n    }\n\n    /// @notice Pay ETH to upgrade plane attributes.\n    ///         Total cost = (moveSpeed + attackSpeed + firepower) * UPGRADE_COST_PER_POINT.\n    ///         Each individual point in any attribute delta costs UPGRADE_COST_PER_POINT wei.\n    ///         The payment is added to the prize pool.\n    function upgradePlane(\n        uint256 moveSpeed,\n        uint256 attackSpeed,\n        uint256 firepower\n    ) public payable {\n        require(players[msg.sender].registered, \"Player not registered\");\n        uint256 totalPoints = moveSpeed + attackSpeed + firepower;\n        require(totalPoints > 0, \"Must upgrade at least one attribute\");\n        uint256 requiredCost = totalPoints * UPGRADE_COST_PER_POINT;\n        require(msg.value == requiredCost, \"Incorrect ETH amount sent\");\n\n        players[msg.sender].plane.moveSpeed += moveSpeed;\n        players[msg.sender].plane.attackSpeed += attackSpeed;\n        players[msg.sender].plane.firepower += firepower;\n        prizePool += msg.value;\n\n        emit PlaneUpgraded(\n            msg.sender,\n            moveSpeed,\n            attackSpeed,\n            firepower,\n            msg.value\n        );\n    }\n}\n"
+      }
+    }
+  }
+}

@@ -38,7 +38,7 @@ function AppInner() {
   const [open, setOpen] = useState(false);
 
   // Read on-chain plane stats for current player
-  const { data: playerData } = usePlayerInfo(
+  const { data: playerData, isLoading: playerDataLoading } = usePlayerInfo(
     isConnected ? (address as Address) : undefined,
   );
 
@@ -70,7 +70,12 @@ function AppInner() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
       {screen === "start" && (
-        <StartScreen onStart={handleStart} open={open} setOpen={setOpen}>
+        <StartScreen
+          onStart={handleStart}
+          open={open}
+          setOpen={setOpen}
+          playerDataLoading={isConnected && playerDataLoading}
+        >
           <ConnectWallet />
         </StartScreen>
       )}

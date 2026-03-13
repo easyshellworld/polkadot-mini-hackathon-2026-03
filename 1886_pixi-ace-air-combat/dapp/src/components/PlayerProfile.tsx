@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatEther, type Address } from "viem";
+import type { PlaneStats } from "../game/types";
 import {
   usePlayerInfo,
   usePrizePool,
@@ -7,7 +8,6 @@ import {
   type PlayerContractData,
 } from "../hooks/useContract";
 import PlaneUpgradeModal from "./PlaneUpgradeModal";
-import type { PlaneStats } from "../game/types";
 
 interface PlayerProfileProps {
   address: Address;
@@ -26,6 +26,11 @@ export default function PlayerProfile({ address }: PlayerProfileProps) {
 
   const { register, isPending, isConfirming, isSuccess, error } =
     useRegisterPlayer();
+
+  // Refetch player data after successful registration
+  useEffect(() => {
+    if (isSuccess) refetchPlayer();
+  }, [isSuccess, refetchPlayer]);
 
   // playerData is a tuple: [registered, score, plane { moveSpeed, attackSpeed, firepower }]
   const registered = playerData ? (playerData as PlayerContractData)[0] : false;
@@ -71,10 +76,7 @@ export default function PlayerProfile({ address }: PlayerProfileProps) {
       </div>
 
       {isSuccess && !registered && (
-        <p
-          className="mb-2 font-mono text-xs text-green-400"
-          onAnimationEnd={() => refetchPlayer()}
-        >
+        <p className="mb-2 font-mono text-xs text-green-400">
           ✓ Registration successful!
         </p>
       )}

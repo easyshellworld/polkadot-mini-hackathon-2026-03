@@ -3,7 +3,7 @@ import { defineChain } from "viem";
 import { metaMask } from "wagmi/connectors";
 
 export const CONTRACT_ADDRESS =
-  "0x5409d44eFAc0227CbD47a309317EE169a9CE95aA" as const; // TODO: Replace with the deployed contract address
+  "0x08697Cb3777B29C4f422AbB07cDA9Fde8De88C72" as const; // TODO: Replace with the deployed contract address
 
 const testnet = defineChain({
   id: 420420417,

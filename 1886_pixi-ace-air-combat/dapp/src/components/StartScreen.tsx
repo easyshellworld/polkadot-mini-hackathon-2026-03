@@ -18,6 +18,7 @@ interface StartScreenProps {
   children?: ReactNode;
   open?: boolean;
   setOpen?: (open: boolean) => void;
+  playerDataLoading?: boolean;
 }
 
 // Pre-compute star positions so render stays pure
@@ -29,7 +30,13 @@ const STARS = Array.from({ length: 60 }, (_, i) => ({
   opacity: (0.2 + ((i * 11 + 1) % 8) * 0.1).toFixed(2),
 }));
 
-function StartScreen({ onStart, children, open, setOpen }: StartScreenProps) {
+function StartScreen({
+  onStart,
+  children,
+  open,
+  setOpen,
+  playerDataLoading,
+}: StartScreenProps) {
   const { isConnected, address } = useConnection();
 
   return (
@@ -155,12 +162,13 @@ function StartScreen({ onStart, children, open, setOpen }: StartScreenProps) {
           {/* Start button */}
           <button
             onClick={() => onStart(isConnected)}
+            disabled={playerDataLoading}
             className="relative cursor-pointer overflow-hidden rounded border border-cyan-500 bg-transparent px-12 py-4 font-mono text-lg font-bold tracking-[0.3em] text-cyan-400 uppercase transition-all duration-200 hover:bg-cyan-500 hover:text-black hover:shadow-[0_0_30px_#00d4ff]"
             style={{
               boxShadow: "0 0 15px rgba(0,212,255,0.3)",
             }}
           >
-            ▶ LAUNCH
+            {playerDataLoading ? "⏳ Loading..." : "▶ LAUNCH"}
           </button>
         </AlertDialogTrigger>
         <AlertDialogContent>

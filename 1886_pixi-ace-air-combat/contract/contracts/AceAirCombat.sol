@@ -21,6 +21,8 @@ contract AceAirCombat {
     mapping(address => Player) public players;
 
     /// @notice Cost in wei per single attribute point upgrade.
+    ///         Each point in the delta values costs UPGRADE_COST_PER_POINT wei.
+    ///         e.g. upgrading moveSpeed by 3 and firepower by 5 costs 8 * UPGRADE_COST_PER_POINT.
     uint256 public constant UPGRADE_COST_PER_POINT = 0.001 ether;
 
     event PrizePoolInitialized(address indexed initializer, uint256 amount);
@@ -59,7 +61,8 @@ contract AceAirCombat {
     }
 
     /// @notice Pay ETH to upgrade plane attributes.
-    ///         Each attribute point costs UPGRADE_COST_PER_POINT wei.
+    ///         Total cost = (moveSpeed + attackSpeed + firepower) * UPGRADE_COST_PER_POINT.
+    ///         Each individual point in any attribute delta costs UPGRADE_COST_PER_POINT wei.
     ///         The payment is added to the prize pool.
     function upgradePlane(
         uint256 moveSpeed,
@@ -67,10 +70,7 @@ contract AceAirCombat {
         uint256 firepower
     ) public payable {
         require(players[msg.sender].registered, "Player not registered");
-        uint256 totalPoints;
-        if (moveSpeed > 0) totalPoints += 1;
-        if (attackSpeed > 0) totalPoints += 1;
-        if (firepower > 0) totalPoints += 1;
+        uint256 totalPoints = moveSpeed + attackSpeed + firepower;
         require(totalPoints > 0, "Must upgrade at least one attribute");
         uint256 requiredCost = totalPoints * UPGRADE_COST_PER_POINT;
         require(msg.value == requiredCost, "Incorrect ETH amount sent");
