@@ -99,3 +99,49 @@ export function useUpgradePlane() {
 
   return { upgrade, isPending, isConfirming, isSuccess, error };
 }
+
+// ─── Write: submit score ─────────────────────────────────────────────────────
+
+export function useSubmitScore() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const submit = (score: bigint) =>
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "submitScore",
+      args: [score],
+      maxFeePerGas: 2_000_000_000_000n,
+      maxPriorityFeePerGas: 2_000_000_000_000n,
+      gas: 80_000n,
+    });
+
+  return { submit, isPending, isConfirming, isSuccess, error };
+}
+
+// ─── Write: redeem score ──────────────────────────────────────────────────────
+
+export function useRedeemScore() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const redeem = (scoreToRedeem: bigint) =>
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "redeemScore",
+      args: [scoreToRedeem],
+      maxFeePerGas: 2_000_000_000_000n,
+      maxPriorityFeePerGas: 2_000_000_000_000n,
+      gas: 100_000n,
+    });
+
+  return { redeem, isPending, isConfirming, isSuccess, error };
+}

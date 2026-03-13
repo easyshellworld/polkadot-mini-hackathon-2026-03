@@ -25,7 +25,19 @@ contract AceAirCombat {
     ///         e.g. upgrading moveSpeed by 3 and firepower by 5 costs 8 * UPGRADE_COST_PER_POINT.
     uint256 public constant UPGRADE_COST_PER_POINT = 0.001 ether;
 
+    /// @notice Score units required for one redemption.
+    uint256 public constant SCORE_PER_REDEMPTION = 10_000;
+
+    /// @notice PAS (in wei) awarded per redemption unit.
+    uint256 public constant PAS_PER_REDEMPTION = 0.001 ether; // 1e15 wei
+
     event PrizePoolInitialized(address indexed initializer, uint256 amount);
+    event ScoreSubmitted(address indexed player, uint256 newScore);
+    event ScoreRedeemed(
+        address indexed player,
+        uint256 scoreSpent,
+        uint256 pasReceived
+    );
     event PlaneUpgraded(
         address indexed player,
         uint256 moveSpeed,
@@ -58,6 +70,40 @@ contract AceAirCombat {
     function registerPlayer() public {
         require(!players[msg.sender].registered, "Player already registered");
         players[msg.sender] = Player(true, 0, Plane(1, 1, 1));
+    }
+
+    /// @notice Submit a new score for the caller; only kept if higher than current.
+    function submitScore(uint256 newScore) external {
+        require(players[msg.sender].registered, "Player not registered");
+        if (newScore > players[msg.sender].score) {
+            players[msg.sender].score = newScore;
+            emit ScoreSubmitted(msg.sender, newScore);
+        }
+    }
+
+    /// @notice Redeem accumulated score for PAS tokens.
+    ///         scoreToRedeem must be a multiple of SCORE_PER_REDEMPTION.
+    function redeemScore(uint256 scoreToRedeem) external {
+        require(players[msg.sender].registered, "Player not registered");
+        require(
+            scoreToRedeem > 0 && scoreToRedeem % SCORE_PER_REDEMPTION == 0,
+            "scoreToRedeem must be a positive multiple of SCORE_PER_REDEMPTION"
+        );
+        require(
+            players[msg.sender].score >= scoreToRedeem,
+            "Insufficient score"
+        );
+        uint256 redemptions = scoreToRedeem / SCORE_PER_REDEMPTION;
+        uint256 pasAmount = redemptions * PAS_PER_REDEMPTION;
+        require(prizePool >= pasAmount, "Insufficient prize pool");
+
+        players[msg.sender].score -= scoreToRedeem;
+        prizePool -= pasAmount;
+
+        (bool sent, ) = payable(msg.sender).call{value: pasAmount}("");
+        require(sent, "ETH transfer failed");
+
+        emit ScoreRedeemed(msg.sender, scoreToRedeem, pasAmount);
     }
 
     /// @notice Pay ETH to upgrade plane attributes.

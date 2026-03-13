@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatEther, type Address } from "viem";
 import type { GameResult } from "../App";
 import {
   usePlayerInfo,
   usePrizePool,
+  useSubmitScore,
   type PlayerContractData,
 } from "../hooks/useContract";
 import PlaneUpgradeModal from "./PlaneUpgradeModal";
@@ -20,6 +21,26 @@ function GameOverScreen({ result, onRestart, address }: GameOverScreenProps) {
 
   const { data: playerData, refetch: refetchPlayer } = usePlayerInfo(address);
   const { data: prizePoolData } = usePrizePool();
+  const {
+    submit: submitScore,
+    isPending: submitPending,
+    isConfirming: submitConfirming,
+    isSuccess: submitSuccess,
+    error: submitError,
+  } = useSubmitScore();
+
+  const onChainScore: bigint = playerData
+    ? (playerData as PlayerContractData)[1]
+    : 0n;
+  const isNewHighScore = BigInt(result.score) > onChainScore;
+
+  useEffect(() => {
+    if (submitSuccess) refetchPlayer();
+  }, [submitSuccess, refetchPlayer]);
+
+  const handleSubmitScore = () => {
+    submitScore(BigInt(result.score));
+  };
 
   const plane = playerData
     ? (playerData as PlayerContractData)[2]
@@ -144,6 +165,54 @@ function GameOverScreen({ result, onRestart, address }: GameOverScreenProps) {
             >
               ✈ Upgrade Plane
             </button>
+          </div>
+        )}
+
+        {/* Score Record panel (shown when connected) */}
+        {address && (
+          <div className="mb-4 w-72 rounded border border-yellow-800 bg-gray-950/80 p-3">
+            <div className="mb-2 font-mono text-xs tracking-widest text-yellow-500 uppercase">
+              Score Record
+            </div>
+            <div className="mb-2 flex justify-between font-mono text-xs">
+              <span className="text-gray-400">This Run</span>
+              <span className="text-yellow-400">
+                {result.score.toLocaleString()}
+              </span>
+            </div>
+            <div className="mb-2 flex justify-between font-mono text-xs">
+              <span className="text-gray-400">On-Chain Best</span>
+              <span className="text-green-400">{onChainScore.toString()}</span>
+            </div>
+            {isNewHighScore && (
+              <div className="mb-2 font-mono text-xs text-yellow-400">
+                🏆 New High Score!
+              </div>
+            )}
+            {submitSuccess ? (
+              <div className="font-mono text-xs text-green-400">
+                ✓ Score submitted!
+              </div>
+            ) : (
+              <button
+                onClick={handleSubmitScore}
+                disabled={
+                  submitPending ||
+                  submitConfirming ||
+                  !isNewHighScore
+                }
+                className="w-full cursor-pointer rounded border border-yellow-500 bg-transparent py-1.5 font-mono text-xs font-bold tracking-[0.2em] text-yellow-400 uppercase transition-all hover:bg-yellow-500 hover:text-black disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-yellow-400"
+              >
+                {submitPending || submitConfirming
+                  ? "⏳ Submitting…"
+                  : "Submit Score"}
+              </button>
+            )}
+            {submitError && (
+              <div className="mt-1 font-mono text-xs text-red-400">
+                {submitError.message.slice(0, 80)}
+              </div>
+            )}
           </div>
         )}
 

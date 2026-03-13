@@ -5,6 +5,7 @@ import {
   usePlayerInfo,
   usePrizePool,
   useRegisterPlayer,
+  useRedeemScore,
   type PlayerContractData,
 } from "../hooks/useContract";
 import PlaneUpgradeModal from "./PlaneUpgradeModal";
@@ -22,15 +23,30 @@ export default function PlayerProfile({ address }: PlayerProfileProps) {
     refetch: refetchPlayer,
   } = usePlayerInfo(address);
 
-  const { data: prizePoolData } = usePrizePool();
-
+  const { data: prizePoolData, refetch: refetchPrizePool } = usePrizePool();
   const { register, isPending, isConfirming, isSuccess, error } =
     useRegisterPlayer();
+
+  const {
+    redeem,
+    isPending: redeemPending,
+    isConfirming: redeemConfirming,
+    isSuccess: redeemSuccess,
+    error: redeemError,
+  } = useRedeemScore();
 
   // Refetch player data after successful registration
   useEffect(() => {
     if (isSuccess) refetchPlayer();
   }, [isSuccess, refetchPlayer]);
+
+  // Refetch after successful redemption
+  useEffect(() => {
+    if (redeemSuccess) {
+      refetchPlayer();
+      refetchPrizePool();
+    }
+  }, [redeemSuccess, refetchPlayer, refetchPrizePool]);
 
   // playerData is a tuple: [registered, score, plane { moveSpeed, attackSpeed, firepower }]
   const registered = playerData ? (playerData as PlayerContractData)[0] : false;
@@ -46,6 +62,12 @@ export default function PlayerProfile({ address }: PlayerProfileProps) {
   };
 
   const prizePool = (prizePoolData as bigint | undefined) ?? 0n;
+
+  const redeemableTimes = Math.floor(Number(score) / 10_000);
+
+  const handleRedeem = () => {
+    redeem(BigInt(redeemableTimes * 10_000));
+  };
 
   const shortAddr = `${address.slice(0, 6)}…${address.slice(-4)}`;
 
@@ -126,6 +148,48 @@ export default function PlayerProfile({ address }: PlayerProfileProps) {
           >
             ✈ Upgrade Plane
           </button>
+
+          {/* Score Redemption */}
+          <div className="mt-3 border-t border-gray-800 pt-3">
+            <div className="mb-1 font-mono text-xs text-gray-400">
+              Score Redemption
+            </div>
+            <div className="mb-2 font-mono text-xs text-gray-400">
+              10,000 pts → 0.001 PAS
+            </div>
+            {redeemableTimes > 0 ? (
+              <>
+                <div className="mb-2 font-mono text-xs text-green-400">
+                  Redeemable: {redeemableTimes}× ={" "}
+                  {(redeemableTimes * 0.001).toFixed(3)} PAS
+                </div>
+                {redeemSuccess ? (
+                  <div className="font-mono text-xs text-green-400">
+                    ✓ Redemption successful!
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleRedeem}
+                    disabled={redeemPending || redeemConfirming}
+                    className="w-full cursor-pointer rounded border border-yellow-500 bg-transparent py-1.5 font-mono text-xs font-bold tracking-[0.2em] text-yellow-400 uppercase transition-all hover:bg-yellow-500 hover:text-black disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-yellow-400"
+                  >
+                    {redeemPending || redeemConfirming
+                      ? "⏳ Redeeming…"
+                      : "💰 Redeem Score"}
+                  </button>
+                )}
+                {redeemError && (
+                  <div className="mt-1 font-mono text-xs text-red-400">
+                    {redeemError.message.slice(0, 80)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="font-mono text-xs text-gray-600">
+                Need 10,000+ score to redeem
+              </div>
+            )}
+          </div>
         </>
       )}
 
