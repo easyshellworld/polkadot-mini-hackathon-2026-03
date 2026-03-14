@@ -3,10 +3,36 @@ use ark_bls12_381::{Fr, G1Affine, G2Affine};
 use bls12_381::{
     decode_fp2_input, decode_fp_input, decode_g1, decode_g1_msm_input, decode_g2,
     decode_g2_msm_input, decode_scalar,
-    codecs::{encode_g1, encode_g2, encode_scalar},
+    codecs::{encode_g1, encode_g2},
 };
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{fs, str::FromStr};
+
+/// Test vector in the Ethereum EIP-2537 format.
+#[derive(Serialize)]
+pub(crate) struct TestVector {
+    #[serde(rename = "Input")]
+    pub input: String,    // 0x-prefixed hex
+    #[serde(rename = "Expected")]
+    pub expected: String, // hex without 0x prefix (matches Ethereum test suite convention)
+    #[serde(rename = "Name")]
+    pub name: String,
+}
+
+/// Print test vectors to stdout or write them to `output_file` as pretty JSON.
+pub(crate) fn write_or_print_vectors(vectors: &[TestVector], output_file: Option<&str>) {
+    let json = serde_json::to_string_pretty(vectors).expect("serialize test vectors");
+    match output_file {
+        Some(path) => {
+            fs::write(path, &json).unwrap_or_else(|e| {
+                eprintln!("error writing to {}: {}", path, e);
+                std::process::exit(1);
+            });
+            eprintln!("wrote {} test vector(s) to {}", vectors.len(), path);
+        }
+        None => println!("{}", json),
+    }
+}
 
 #[derive(Deserialize, Serialize, Clone)]
 pub(crate) struct G1PointInput {
@@ -297,10 +323,6 @@ pub(crate) fn g2_to_output(point: G2Affine) -> G2PointOut {
             format!("0x{}", hex::encode(&encoded[192..])),
         ],
     }
-}
-
-pub(crate) fn scalar_to_hex(scalar: Fr) -> String {
-    format!("0x{}", hex::encode(encode_scalar(scalar)))
 }
 
 pub(crate) fn parse_secret_key_or_exit(secret_key: &str) -> Fr {

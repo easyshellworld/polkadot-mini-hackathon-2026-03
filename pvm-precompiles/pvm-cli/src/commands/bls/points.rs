@@ -1,7 +1,8 @@
 use ark_bls12_381::{G1Affine, G2Affine};
-use bls12_381::{add_g1_points, add_g2_points, generate_random_g1_point, generate_random_g2_point, codecs::{encode_g1, encode_g2}};
+use bls12_381::{add_g1_points, add_g2_points, generate_random_g1_point, generate_random_g2_point,
+    generate_g1_add_testdata, generate_g2_add_testdata, codecs::{encode_g1, encode_g2}};
 
-use super::shared::{parse_g1_point_or_exit, parse_g2_point_or_exit};
+use super::shared::{parse_g1_point_or_exit, parse_g2_point_or_exit, TestVector, write_or_print_vectors};
 
 pub(super) fn cmd_random_g1() {
     print_g1_point("Random BLS G1 Point", &generate_random_g1_point());
@@ -31,6 +32,32 @@ pub(super) fn cmd_g2_add(point_a: String, point_b: String) {
     print_g2_point("Point A", &point_a);
     print_g2_point("Point B", &point_b);
     print_g2_point("Result", &result);
+}
+
+pub(super) fn cmd_g1_add_testdata(count: usize, output_file: Option<String>) {
+    let vectors: Vec<TestVector> = generate_g1_add_testdata(count)
+        .into_iter()
+        .enumerate()
+        .map(|(i, (input, expected))| TestVector {
+            input: format!("0x{}", hex::encode(input)),
+            expected: hex::encode(expected),
+            name: format!("bls12381_g1_add {}", i + 1),
+        })
+        .collect();
+    write_or_print_vectors(&vectors, output_file.as_deref());
+}
+
+pub(super) fn cmd_g2_add_testdata(count: usize, output_file: Option<String>) {
+    let vectors: Vec<TestVector> = generate_g2_add_testdata(count)
+        .into_iter()
+        .enumerate()
+        .map(|(i, (input, expected))| TestVector {
+            input: format!("0x{}", hex::encode(input)),
+            expected: hex::encode(expected),
+            name: format!("bls12381_g2_add {}", i + 1),
+        })
+        .collect();
+    write_or_print_vectors(&vectors, output_file.as_deref());
 }
 
 pub(crate) fn print_g1_point(label: &str, point: &G1Affine) {

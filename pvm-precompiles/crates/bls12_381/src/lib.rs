@@ -508,6 +508,132 @@ pub fn generate_mapped_g2_to_fp2(n: usize) -> Vec<([u8; 128], [u8; 256])> {
     vectors
 }
 
+/// Generate `count` deterministic G1-add test vectors.
+/// Returns `(input_bytes [256], expected_bytes [128])` per vector.
+pub fn generate_g1_add_testdata(count: usize) -> Vec<([u8; 256], [u8; 128])> {
+    (0..count)
+        .map(|i| {
+            let mut seed = [0xA1u8; 32];
+            seed[0] = (i & 0xFF) as u8;
+            seed[1] = ((i >> 8) & 0xFF) as u8;
+            let mut rng = seeded_rng(seed);
+            let a = G1Projective::rand(&mut rng).into_affine();
+            let b = G1Projective::rand(&mut rng).into_affine();
+            let result = add_g1_points(a, b);
+            let mut input = [0u8; 256];
+            input[..128].copy_from_slice(&encode_g1(a));
+            input[128..].copy_from_slice(&encode_g1(b));
+            (input, encode_g1(result))
+        })
+        .collect()
+}
+
+/// Generate `count` deterministic G2-add test vectors.
+/// Returns `(input_bytes [512], expected_bytes [256])` per vector.
+pub fn generate_g2_add_testdata(count: usize) -> Vec<([u8; 512], [u8; 256])> {
+    (0..count)
+        .map(|i| {
+            let mut seed = [0xB2u8; 32];
+            seed[0] = (i & 0xFF) as u8;
+            seed[1] = ((i >> 8) & 0xFF) as u8;
+            let mut rng = seeded_rng(seed);
+            let a = G2Projective::rand(&mut rng).into_affine();
+            let b = G2Projective::rand(&mut rng).into_affine();
+            let result = add_g2_points(a, b);
+            let mut input = [0u8; 512];
+            input[..256].copy_from_slice(&encode_g2(&a));
+            input[256..].copy_from_slice(&encode_g2(&b));
+            (input, encode_g2(&result))
+        })
+        .collect()
+}
+
+/// Generate `count` deterministic G1-MSM test vectors each with `pairs` point-scalar pairs.
+/// Returns `(input_bytes, expected_bytes [128])` per vector.
+pub fn generate_g1_msm_testdata_n(
+    count: usize,
+    pairs: usize,
+) -> Result<Vec<(Vec<u8>, [u8; 128])>, String> {
+    if pairs == 0 {
+        return Err("pairs must be greater than zero".to_string());
+    }
+    (0..count)
+        .map(|i| {
+            let mut seed = [0x56u8; 32];
+            seed[0] = (i & 0xFF) as u8;
+            seed[1] = ((i >> 8) & 0xFF) as u8;
+            let mut rng = seeded_rng(seed);
+            let pairs_data: Vec<(G1Affine, Fr)> = (0..pairs)
+                .map(|_| (G1Projective::rand(&mut rng).into_affine(), Fr::rand(&mut rng)))
+                .collect();
+            let input = encode_g1_msm_input(&pairs_data);
+            let result = compute_g1_msm(&pairs_data)?;
+            Ok((input, encode_g1(result)))
+        })
+        .collect()
+}
+
+/// Generate `count` deterministic G2-MSM test vectors each with `pairs` point-scalar pairs.
+/// Returns `(input_bytes, expected_bytes [256])` per vector.
+pub fn generate_g2_msm_testdata_n(
+    count: usize,
+    pairs: usize,
+) -> Result<Vec<(Vec<u8>, [u8; 256])>, String> {
+    if pairs == 0 {
+        return Err("pairs must be greater than zero".to_string());
+    }
+    (0..count)
+        .map(|i| {
+            let mut seed = [0x65u8; 32];
+            seed[0] = (i & 0xFF) as u8;
+            seed[1] = ((i >> 8) & 0xFF) as u8;
+            let mut rng = seeded_rng(seed);
+            let pairs_data: Vec<(G2Affine, Fr)> = (0..pairs)
+                .map(|_| (G2Projective::rand(&mut rng).into_affine(), Fr::rand(&mut rng)))
+                .collect();
+            let input = encode_g2_msm_input(&pairs_data);
+            let result = compute_g2_msm(&pairs_data)?;
+            Ok((input, encode_g2(&result)))
+        })
+        .collect()
+}
+
+/// Generate `count` deterministic MapFp→G1 test vectors.
+/// Returns `(input_bytes [64], expected_bytes [128])` per vector.
+pub fn generate_map_fp_testdata(count: usize) -> Result<Vec<([u8; 64], [u8; 128])>, String> {
+    (0..count)
+        .map(|i| {
+            let mut seed = [0x35u8; 32];
+            seed[0] = (i & 0xFF) as u8;
+            seed[1] = ((i >> 8) & 0xFF) as u8;
+            let fp = Fq::rand(&mut seeded_rng(seed));
+            let input = encode_fp(&fp);
+            let mapped = map_fp_to_g1(fp)?;
+            Ok((input, encode_g1(mapped)))
+        })
+        .collect()
+}
+
+/// Generate `count` deterministic MapFp2→G2 test vectors.
+/// Returns `(input_bytes [128], expected_bytes [256])` per vector.
+pub fn generate_map_fp2_testdata(count: usize) -> Result<Vec<([u8; 128], [u8; 256])>, String> {
+    (0..count)
+        .map(|i| {
+            let mut seed_c0 = [0x63u8; 32];
+            let mut seed_c1 = [0x64u8; 32];
+            seed_c0[0] = (i & 0xFF) as u8;
+            seed_c1[0] = (i & 0xFF) as u8;
+            let fp2 = Fq2 {
+                c0: Fq::rand(&mut seeded_rng(seed_c0)),
+                c1: Fq::rand(&mut seeded_rng(seed_c1)),
+            };
+            let input = encode_fp2(&fp2);
+            let mapped = map_fp2_to_g2(fp2)?;
+            Ok((input, encode_g2(&mapped)))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
