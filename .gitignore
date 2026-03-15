@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ignore project node_modules
+*/**/node_modules
+*/**/cache
+*/**/artifacts
+*/**/.env
+*/**/dist
