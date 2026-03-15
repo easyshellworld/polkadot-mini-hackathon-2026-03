@@ -1,6 +1,6 @@
 # PVM Precompiles Developer Toolkit
 
-This repository contains developer tooling, Solidity helper libraries, and test infrastructure for interacting with cryptographic precompiles implemented for the PVM runtime.
+This repository contains developer tooling, Solidity helper libraries, and test infrastructure for interacting with cryptographic precompiles implemented for the pallet-revive runtime.
 
 The goal is to make advanced cryptographic functionality accessible to smart contracts running on parachains that integrate `pallet-revive`.
 
