@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+    container_name: dotduel-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-3402}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - ALLOWED_ORIGINS=http://localhost:${FRONTEND_PORT:-3400},http://192.168.16.205:${FRONTEND_PORT:-3400}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DEPLOYER_PRIVATE_KEY=${DEPLOYER_PRIVATE_KEY:-}
+      - RPC_URL=${RPC_URL:-}
+      - CONTRACT_ADDRESS=${CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000001}
+      - TOURNAMENT_ADDRESS=${TOURNAMENT_ADDRESS:-0x0000000000000000000000000000000000000001}
+      - ARENA_ADDRESS=${ARENA_ADDRESS:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Frontend (production: nginx + built React) ──────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_RPC_URL: ${VITE_RPC_URL:-}
+        VITE_CONTRACT_ADDRESS: ${VITE_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}
+        VITE_TOURNAMENT_ADDRESS: ${VITE_TOURNAMENT_ADDRESS:-0x0000000000000000000000000000000000000000}
+        VITE_ARENA_ADDRESS: ${VITE_ARENA_ADDRESS:-0x0000000000000000000000000000000000000000}
+        VITE_USE_TESTNET: ${VITE_USE_TESTNET:-true}
+    container_name: dotduel-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3400}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Frontend Dev (Vite HMR — only with --profile dev) ──────────────────────
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: dotduel-frontend-dev
+    profiles: ["dev"]
+    ports:
+      - "${DEV_PORT:-3401}:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    environment:
+      - VITE_API_BASE_URL=http://192.168.16.205:${BACKEND_PORT:-3402}
+      - VITE_RPC_URL=${VITE_RPC_URL:-}
+      - VITE_CONTRACT_ADDRESS=${VITE_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}
+      - VITE_TOURNAMENT_ADDRESS=${VITE_TOURNAMENT_ADDRESS:-0x0000000000000000000000000000000000000000}
+      - VITE_ARENA_ADDRESS=${VITE_ARENA_ADDRESS:-0x0000000000000000000000000000000000000000}
+      - VITE_USE_TESTNET=${VITE_USE_TESTNET:-true}
+    depends_on:
+      backend:
+        condition: service_healthy

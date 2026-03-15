@@ -1,0 +1,10 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+特別注意：
+- 今次是應付黑客松，所以只需要使用到testnet。
+- 請增加一個按鍵以便用戶可以獲取測試幣
+https://docs.polkadot.com/develop/smart-contracts/connect-to-polkadot/
