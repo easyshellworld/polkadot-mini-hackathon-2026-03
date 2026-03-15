@@ -1,0 +1,28 @@
+[package]
+name = "groth16_verifier"
+version = "0.1.0"
+edition = "2021"
+authors = ["PolkaShield Team"]
+description = "Groth16 BN254 pairing verifier for ink! smart contracts"
+
+[dependencies]
+ink = { workspace = true }
+scale = { workspace = true }
+scale-info = { workspace = true }
+
+[dev-dependencies]
+ink_e2e = { version = "5.1.0" }
+
+[lib]
+name = "groth16_verifier"
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+]
+ink-as-dependency = []
+e2e-tests = []

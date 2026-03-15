@@ -1,0 +1,42 @@
+{
+  "name": "atomic-intent-for-polkadot-frontend",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint": "eslint . --ext ts,tsx"
+  },
+  "dependencies": {
+    "@polkadot/api": "^12.0.0",
+    "@polkadot/api-contract": "^12.0.0",
+    "@polkadot/extension-dapp": "^0.52.0",
+    "@polkadot/keyring": "^13.0.0",
+    "@polkadot/types": "^12.0.0",
+    "@polkadot/util": "^13.0.0",
+    "@polkadot/util-crypto": "^13.0.0",
+    "buffer": "^6.0.3",
+    "circomlibjs": "^0.1.7",
+    "ethers": "^6.13.4",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^6.26.0",
+    "snarkjs": "^0.7.4",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^9.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}

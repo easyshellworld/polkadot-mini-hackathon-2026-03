@@ -1,0 +1,28 @@
+[package]
+name = "dark_pool"
+version = "0.1.0"
+edition = "2021"
+authors = ["PolkaShield Team"]
+description = "PolkaShield DarkPool - Main coordination contract for ZK dark pool trading"
+
+[dependencies]
+ink = { workspace = true }
+scale = { workspace = true }
+scale-info = { workspace = true }
+
+[dev-dependencies]
+ink_e2e = { version = "5.1.0" }
+
+[lib]
+name = "dark_pool"
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+]
+ink-as-dependency = []
+e2e-tests = []

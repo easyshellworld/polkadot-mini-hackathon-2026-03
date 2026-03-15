@@ -1,0 +1,21 @@
+{
+  "name": "polkashield-solidity",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node ./scripts/hardhat-run.cjs compile",
+    "test": "node ./scripts/hardhat-run.cjs test",
+    "deploy:revive": "node ./scripts/hardhat-run.cjs run scripts/deploy.ts --network revive",
+    "deploy:mocks": "node ./scripts/hardhat-run.cjs run scripts/deploy-mocks.ts --network revive",
+    "mint:mocks": "node ./scripts/hardhat-run.cjs run scripts/mint-mocks.ts --network revive",
+    "lint": "echo 'No linter configured for solidity package yet'"
+  },
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "abort-controller": "^3.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.17.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

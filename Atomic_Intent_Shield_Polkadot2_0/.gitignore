@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+target/
+.parcel-cache/
+
+# Build outputs
+dist/
+build/
+*.wasm
+!circuits/build/.gitkeep
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+**/*.rs.bk
+
+# ZK artifacts (large files — rebuild locally)
+circuits/build/
+*.ptau
+*.zkey
+*.r1cs
+*.sym
+*.wtns
+
+# Docker
+*.log
+
+# Test
+coverage/
+.nyc_output/
+
+# Substrate
+substrate-data/

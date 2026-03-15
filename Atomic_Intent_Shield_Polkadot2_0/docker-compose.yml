@@ -1,0 +1,104 @@
+services:
+  # ============================================================
+  # Substrate Contracts Node (local development)
+  # ============================================================
+  substrate-node:
+    image: paritytech/contracts-ci-linux:latest
+    container_name: polkashield-substrate
+    ports:
+      - "9944:9944"   # WS RPC
+      - "9933:9933"   # HTTP RPC
+    command:
+      - "substrate-contracts-node"
+      - "--dev"
+      - "--rpc-external"
+      - "--rpc-cors=all"
+    volumes:
+      - substrate-data:/data
+    healthcheck:
+      # contracts-node exposes JSON-RPC on 9944 in this image; plain HTTP probe returns 405 when service is up.
+      test: ["CMD-SHELL", "code=$$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:9944 || true); [ \"$$code\" = \"200\" ] || [ \"$$code\" = \"405\" ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - polkashield
+
+  # ============================================================
+  # Redis (solver state store)
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: polkashield-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - polkashield
+
+  # ============================================================
+  # Solver (Rust matching engine + API)
+  # ============================================================
+  solver:
+    build:
+      context: ./solver
+      dockerfile: Dockerfile
+    container_name: polkashield-solver
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env.local
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3001
+      - SUBSTRATE_RPC=${SUBSTRATE_RPC:-http://substrate-node:9933}
+      - DARK_POOL_ADDRESS=${DARK_POOL_CONTRACT:-0x0000000000000000000000000000000000000000}
+      - VERIFIER_ADDRESS=${INTENT_VERIFIER_CONTRACT:-0x0000000000000000000000000000000000000000}
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=info,solver=debug
+      - JWT_SECRET=${JWT_SECRET:-polkashield-dev-secret-change-in-production}
+      - SOLVER_SEED_PHRASE=${SOLVER_MNEMONIC:-//Alice}
+      - MATCHING_INTERVAL_MS=5000
+      - PROTOCOL_FEE_BPS=30
+    depends_on:
+      redis:
+        condition: service_healthy
+      substrate-node:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - polkashield
+
+  # ============================================================
+  # Frontend (React + Vite)
+  # ============================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: polkashield-frontend
+    ports:
+      - "13080:80"
+    depends_on:
+      - solver
+    networks:
+      - polkashield
+
+volumes:
+  substrate-data:
+  redis-data:
+
+networks:
+  polkashield:
+    driver: bridge

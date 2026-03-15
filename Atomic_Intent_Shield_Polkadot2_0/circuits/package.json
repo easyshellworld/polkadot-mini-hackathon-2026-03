@@ -1,0 +1,16 @@
+{
+  "name": "polkashield-circuits",
+  "version": "0.1.0",
+  "description": "ZK circuits for PolkaShield dark pool (Circom/Groth16)",
+  "scripts": {
+    "compile": "circom intent_circuit.circom --r1cs --wasm --sym -o build/",
+    "compile:settlement": "circom settlement_circuit.circom --r1cs --wasm --sym -o build/",
+    "setup": "bash scripts/trusted_setup.sh",
+    "generate-vk": "bash scripts/export_vk.sh",
+    "test": "node test/test_intent_circuit.js"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.4"
+  }
+}

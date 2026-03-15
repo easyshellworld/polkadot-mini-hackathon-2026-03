@@ -1,0 +1,28 @@
+[package]
+name = "intent_verifier"
+version = "0.1.0"
+edition = "2021"
+authors = ["PolkaShield Team"]
+description = "PolkaShield IntentVerifier - ZK proof verification for trade intents"
+
+[dependencies]
+ink = { workspace = true }
+scale = { workspace = true }
+scale-info = { workspace = true }
+
+[dev-dependencies]
+ink_e2e = { version = "5.1.0" }
+
+[lib]
+name = "intent_verifier"
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+]
+ink-as-dependency = []
+e2e-tests = []
