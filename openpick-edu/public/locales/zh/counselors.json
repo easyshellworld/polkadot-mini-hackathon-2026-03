@@ -1,0 +1,11 @@
+{
+  "title": "顾问咨询服务",
+  "subtitle": "专业的 Web3 和智能合约开发顾问，提供一对一技术咨询服务",
+  "loading": "加载中...",
+  "hideMyOrders": "隐藏我的订单",
+  "viewMyOrders": "查看我的订单",
+  "addNewCounselor": "添加新顾问",
+  "myOrders": "我的订单",
+  "orderId": "订单ID",
+  "noCounselorsAvailable": "暂无可用顾问"
+}

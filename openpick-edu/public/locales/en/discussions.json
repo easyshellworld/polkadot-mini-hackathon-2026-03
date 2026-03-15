@@ -1,0 +1,53 @@
+{
+  "title": "Discussions",
+  "joinDiscussion": "Join the Discussion",
+  "notConfigured": "Discussions Not Configured",
+  "configureInstructions": "Please configure the giscus settings in the Settings page to enable discussions.",
+  "goToSettings": "Go to Settings",
+  "settings": {
+    "title": "Discussions Configuration",
+    "repository": "Repository",
+    "repositoryPlaceholder": "owner/repo",
+    "repositoryId": "Repository ID",
+    "repositoryIdPlaceholder": "R_kgDOH...",
+    "category": "Category",
+    "categoryPlaceholder": "General",
+    "categoryId": "Category ID",
+    "categoryIdPlaceholder": "DIC_kgDOH...",
+    "mapping": "Mapping",
+    "mappingPathname": "Pathname",
+    "mappingUrl": "URL",
+    "mappingTitle": "Title",
+    "mappingOgTitle": "OG Title",
+    "mappingSpecific": "Specific",
+    "term": "Term",
+    "termPlaceholder": "discussions-page",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeDarkDimmed": "Dark Dimmed",
+    "themeTransparentDark": "Transparent Dark",
+    "themePreferredColorScheme": "Preferred Color Scheme",
+    "language": "Language",
+    "inputPosition": "Input Position",
+    "inputPositionTop": "Top",
+    "inputPositionBottom": "Bottom",
+    "enableReactions": "Enable Reactions",
+    "emitMetadata": "Emit Metadata",
+    "lazyLoading": "Lazy Loading",
+    "saveConfiguration": "Save Configuration",
+    "howToGetValues": "How to get these values?",
+    "instructions": {
+      "install": "Go to github.com/apps/giscus and install the app",
+      "selectRepo": "Select your repository and enable GitHub Discussions",
+      "chooseCategory": "Choose a discussion category for the widget",
+      "copyConfig": "Copy the generated configuration values from the giscus website"
+    },
+    "validation": {
+      "repoRequired": "Repository is required",
+      "repoIdRequired": "Repository ID is required",
+      "categoryRequired": "Category is required",
+      "categoryIdRequired": "Category ID is required"
+    }
+  }
+}

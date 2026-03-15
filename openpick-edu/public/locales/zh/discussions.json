@@ -1,0 +1,53 @@
+{
+  "title": "讨论区",
+  "joinDiscussion": "加入讨论",
+  "notConfigured": "讨论区未配置",
+  "configureInstructions": "请在设置页面配置 giscus 设置以启用讨论功能。",
+  "goToSettings": "前往设置",
+  "settings": {
+    "title": "讨论区配置",
+    "repository": "仓库",
+    "repositoryPlaceholder": "owner/repo",
+    "repositoryId": "仓库 ID",
+    "repositoryIdPlaceholder": "R_kgDOH...",
+    "category": "分类",
+    "categoryPlaceholder": "常规",
+    "categoryId": "分类 ID",
+    "categoryIdPlaceholder": "DIC_kgDOH...",
+    "mapping": "映射方式",
+    "mappingPathname": "路径名",
+    "mappingUrl": "URL",
+    "mappingTitle": "标题",
+    "mappingOgTitle": "OG 标题",
+    "mappingSpecific": "特定",
+    "term": "术语",
+    "termPlaceholder": "discussions-page",
+    "theme": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "themeDarkDimmed": "深色（暗淡）",
+    "themeTransparentDark": "透明深色",
+    "themePreferredColorScheme": "跟随系统",
+    "language": "语言",
+    "inputPosition": "输入框位置",
+    "inputPositionTop": "顶部",
+    "inputPositionBottom": "底部",
+    "enableReactions": "启用反应",
+    "emitMetadata": "发送元数据",
+    "lazyLoading": "懒加载",
+    "saveConfiguration": "保存配置",
+    "howToGetValues": "如何获取这些值？",
+    "instructions": {
+      "install": "访问 github.com/apps/giscus 并安装应用",
+      "selectRepo": "选择您的仓库并启用 GitHub Discussions",
+      "chooseCategory": "为小组件选择讨论分类",
+      "copyConfig": "从 giscus 网站复制生成的配置值"
+    },
+    "validation": {
+      "repoRequired": "仓库是必需的",
+      "repoIdRequired": "仓库 ID 是必需的",
+      "categoryRequired": "分类是必需的",
+      "categoryIdRequired": "分类 ID 是必需的"
+    }
+  }
+}

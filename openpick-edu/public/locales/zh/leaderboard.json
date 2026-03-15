@@ -1,0 +1,18 @@
+{
+  "title": "排行榜",
+  "subtitle": "查看你在 {totalUsers} 位成员中的排名",
+  "rank": "排名",
+  "members": "成员",
+  "score": "得分",
+  "entries": "项目数",
+  "last": "最近活动",
+  "join": "加入时间",
+  "noData": "暂无数据",
+  "loading": "加载排行榜中...",
+  "error": "加载排行榜失败",
+  "retry": "重试",
+  "searchPlaceholder": "按钱包地址搜索...",
+  "prevPage": "上一页",
+  "nextPage": "下一页",
+  "pageOf": "第 {current} 页，共 {total} 页"
+}

@@ -1,0 +1,21 @@
+{
+  "wallet": {
+    "connect": "Connect Wallet",
+    "connected": "Connected",
+    "disconnect": "Disconnect",
+    "selectWallet": "Select Wallet",
+    "connecting": "Connecting...",
+    "connectionError": "Connection Error",
+    "connectionSuccess": "Connection Successful",
+    "address": "Address",
+    "balance": "Balance"
+  },
+  "transaction": {
+    "pending": "Pending",
+    "confirmed": "Confirmed",
+    "failed": "Failed",
+    "transactionHash": "Transaction Hash",
+    "blockNumber": "Block Number",
+    "timestamp": "Timestamp"
+  }
+}

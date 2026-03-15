@@ -1,0 +1,18 @@
+{
+  "title": "Leaderboard",
+  "subtitle": "See how you rank among {totalUsers} members",
+  "rank": "#",
+  "members": "Members",
+  "score": "Score",
+  "entries": "Entries",
+  "last": "Last",
+  "join": "Join",
+  "noData": "No data available",
+  "loading": "Loading leaderboard...",
+  "error": "Failed to load leaderboard",
+  "retry": "Retry",
+  "searchPlaceholder": "Search by wallet address...",
+  "prevPage": "Previous",
+  "nextPage": "Next",
+  "pageOf": "Page {current} of {total}"
+}

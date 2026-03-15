@@ -1,0 +1,22 @@
+{
+  "logo": "OpenPick",
+  "settings": "Settings",
+  "network": "Network",
+  "gasPrice": "Gas Price",
+  "version": "Version",
+  "connect": "Connect",
+  "disconnect": "Disconnect",
+  "save": "Save",
+  "cancel": "Cancel",
+  "close": "Close",
+  "loading": "Loading...",
+  "error": "Error",
+  "success": "Success",
+  "comingSoon": "Coming Soon",
+  "comingSoonDescription": "This feature is currently under development. Stay tuned!",
+  "ok": "OK",
+  "home": "Home",
+  "counselors": "Counselors",
+  "leaderboard": "Leaderboard",
+  "discussions": "Discussions"
+}

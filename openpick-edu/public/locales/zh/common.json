@@ -1,0 +1,22 @@
+{
+  "logo": "OpenPick",
+  "settings": "设置",
+  "network": "网络",
+  "gasPrice": "Gas价格",
+  "version": "版本",
+  "connect": "连接",
+  "disconnect": "断开连接",
+  "save": "保存",
+  "cancel": "取消",
+  "close": "关闭",
+  "loading": "加载中...",
+  "error": "错误",
+  "success": "成功",
+  "comingSoon": "即将到来",
+  "comingSoonDescription": "此功能正在开发中，敬请期待！",
+  "ok": "确定",
+  "home": "主页",
+  "counselors": "顾问",
+  "leaderboard": "排行榜",
+  "discussions": "讨论区"
+}

@@ -1,0 +1,21 @@
+{
+  "wallet": {
+    "connect": "连接钱包",
+    "connected": "已连接",
+    "disconnect": "断开连接",
+    "selectWallet": "选择钱包",
+    "connecting": "连接中...",
+    "connectionError": "连接错误",
+    "connectionSuccess": "连接成功",
+    "address": "地址",
+    "balance": "余额"
+  },
+  "transaction": {
+    "pending": "待处理",
+    "confirmed": "已确认",
+    "failed": "失败",
+    "transactionHash": "交易哈希",
+    "blockNumber": "区块号",
+    "timestamp": "时间戳"
+  }
+}
