@@ -1,6 +1,6 @@
 # PVM Precompiles Developer Toolkit
 
-This repository contains developer tooling, Solidity helper libraries, and test infrastructure for interacting with cryptographic precompiles implemented for the PVM runtime.
+This repository contains developer tooling, Solidity helper libraries, and test infrastructure for interacting with cryptographic precompiles implemented for the pallet-revive runtime.
 
 The goal is to make advanced cryptographic functionality accessible to smart contracts running on parachains that integrate `pallet-revive`.
 
@@ -27,8 +27,8 @@ These operations are exposed as native precompiles, so contracts can execute the
 
 This repository is the developer-facing layer around those runtime precompiles. It provides:
 
-- [Solidity helper libraries](solidity/README.md) for contract integration
-- [CLI tooling](pvm-cli/README.md) to generate/validate payloads and run local cryptographic flows
+- [Solidity helper libraries](../frontend//README.md) for contract integration
+- [CLI tooling](./pvm-cli/README.md) to generate/validate payloads and run local cryptographic flows
 - [Rust crates](crates/README.md) for deterministic test vectors and core operation utilities
 - Solidity example contracts in `solidity/contracts/examples`
 
@@ -36,12 +36,15 @@ This repository is the developer-facing layer around those runtime precompiles. 
 
 ```
 root
-├─ crates/
-│  └─ Rust crates for Schnorr and BLS test vectors/operations
-├─ pvm-cli/
-│  └─ Command line tooling for Schnorr and BLS workflows
-├─ solidity/
-│  └─ Solidity libraries, interfaces, modules, examples, and scripts
+|
+├─  backend
+| | └─ crates/
+│ | | └─ Rust crates for Schnorr and BLS test vectors/operations
+| | └─ pvm-cli/
+│ | | └─ Command line tooling for Schnorr and BLS workflows
+├─  frontend
+| | └─ solidity/
+│ | | └─ Solidity libraries, interfaces, modules, examples, and scripts
 └─ docs/
 	 └─ Architecture, integration, and roadmap documentation
 ```
@@ -64,11 +67,10 @@ root
 
 ## Documentation Index
 
-- [How precompiles work](docs/how-precompiles-work.md)
-- [Building with precompiles](docs/building-with-precompiles.md)
-- [Project roadmap](docs/roadmap.md)
+- [How precompiles work](../doc/how-precompiles-work.md)
+- [Building with precompiles](../doc/building-with-precompiles.md)
 - [PVM CLI guide](pvm-cli/README.md)
-- [Solidity integration guide](solidity/README.md)
+- [Solidity integration guide](../frontend/README.md)
 - [Rust crates guide](crates/README.md)
 
 ## Architecture Overview

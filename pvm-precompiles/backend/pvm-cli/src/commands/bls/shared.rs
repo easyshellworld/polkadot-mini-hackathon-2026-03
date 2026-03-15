@@ -19,18 +19,50 @@ pub(crate) struct TestVector {
     pub name: String,
 }
 
-/// Print test vectors to stdout or write them to `output_file` as pretty JSON.
+/// Write test vectors to `output_file` as pretty JSON, or print hex + decoded structs to stdout.
 pub(crate) fn write_or_print_vectors(vectors: &[TestVector], output_file: Option<&str>) {
-    let json = serde_json::to_string_pretty(vectors).expect("serialize test vectors");
     match output_file {
         Some(path) => {
+            let json = serde_json::to_string_pretty(vectors).expect("serialize test vectors");
             fs::write(path, &json).unwrap_or_else(|e| {
                 eprintln!("error writing to {}: {}", path, e);
                 std::process::exit(1);
             });
             eprintln!("wrote {} test vector(s) to {}", vectors.len(), path);
         }
-        None => println!("{}", json),
+        None => {
+            for vector in vectors {
+                println!("=== {} ===", vector.name);
+                println!("Input:    {}", vector.input);
+                println!("Expected: 0x{}", vector.expected);
+                print_decoded_expected(&vector.expected);
+                println!();
+            }
+        }
+    }
+}
+
+/// Decode the expected hex output into struct fields based on its length.
+fn print_decoded_expected(expected_hex: &str) {
+    let hex_str = expected_hex.strip_prefix("0x").unwrap_or(expected_hex);
+    let byte_len = hex_str.len() / 2;
+
+    match byte_len {
+        // G1 point: x(64 bytes) || y(64 bytes) = 128 bytes
+        128 => {
+            println!("  Decoded G1 Point:");
+            println!("    x: 0x{}", &hex_str[..128]);
+            println!("    y: 0x{}", &hex_str[128..]);
+        }
+        // G2 point: x[0](64) || x[1](64) || y[0](64) || y[1](64) = 256 bytes
+        256 => {
+            println!("  Decoded G2 Point:");
+            println!("    x[0]: 0x{}", &hex_str[..128]);
+            println!("    x[1]: 0x{}", &hex_str[128..256]);
+            println!("    y[0]: 0x{}", &hex_str[256..384]);
+            println!("    y[1]: 0x{}", &hex_str[384..]);
+        }
+        _ => {}
     }
 }
 
