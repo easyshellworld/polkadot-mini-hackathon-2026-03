@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3efe6;
+  --ink: #0f1111;
+  --muted: rgba(33, 37, 39, 0.64);
+  --button: #111111;
+  --button-hover: #1c1d1e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--paper);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.landing-shell {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--paper);
+  isolation: isolate;
+}
+
+.landing-backdrop,
+.landing-noise,
+.landing-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.landing-backdrop {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 252, 247, 0.56),
+      rgba(246, 242, 236, 0.4)
+    ),
+    url("/subvote-village-scene.svg");
+  background-size: cover;
+  background-position: center center;
+  filter: saturate(0.96) contrast(0.94) brightness(1.03);
+  transform: scale(1.04);
+}
+
+.landing-noise {
+  opacity: 0.3;
+  mix-blend-mode: multiply;
+  background: url("/film-grain.svg");
+  background-size: 320px 320px;
+}
+
+.landing-vignette {
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.74) 30%,
+      rgba(242, 239, 231, 0.9) 58%,
+      rgba(236, 232, 224, 0.94) 100%
+    ),
+    radial-gradient(
+      circle at center,
+      rgba(255, 255, 255, 0),
+      rgba(236, 232, 224, 0.24) 66%,
+      rgba(224, 219, 211, 0.78) 100%
+    );
+}
+
+.landing-hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 100vh;
+  padding: 2rem;
+  text-align: center;
+  transform: translateY(1.5vh);
+}
+
+.landing-hero::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: min(56rem, 78vw);
+  height: min(24rem, 42vw);
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.72),
+    rgba(255, 255, 255, 0.38) 48%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  filter: blur(10px);
+}
+
+.landing-kicker,
+.landing-title,
+.landing-copy,
+.landing-cta {
+  opacity: 0;
+  animation: landing-fade-up 760ms cubic-bezier(0.18, 0.88, 0.22, 1) forwards;
+}
+
+.landing-kicker {
+  margin: 0 0 0.15rem;
+  font-family: var(--font-serif), serif;
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: rgba(52, 63, 82, 0.64);
+  animation-delay: 100ms;
+}
+
+.landing-title {
+  margin: 0;
+  font-size: clamp(4.8rem, 11vw, 9.5rem);
+  line-height: 0.92;
+  font-weight: 400;
+  letter-spacing: -0.085em;
+  color: #09090a;
+  text-wrap: balance;
+  animation-delay: 180ms;
+}
+
+.landing-copy {
+  width: min(40rem, 80vw);
+  margin: 0.65rem auto 0;
+  font-size: clamp(1.05rem, 1.9vw, 1.65rem);
+  line-height: 1.55;
+  color: var(--muted);
+  text-wrap: balance;
+  animation-delay: 260ms;
+}
+
+.landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  min-width: 12.25rem;
+  margin-top: 1.3rem;
+  padding: 1rem 1.5rem;
+  border-radius: 999px;
+  background: var(--button);
+  color: #fbfbfb;
+  font-size: 1.05rem;
+  font-weight: 500;
+  box-shadow:
+    0 20px 40px rgba(17, 17, 17, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+  animation-delay: 340ms;
+}
+
+.landing-cta:hover {
+  transform: translateY(-2px);
+  background: var(--button-hover);
+  box-shadow:
+    0 26px 48px rgba(17, 17, 17, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.landing-cta-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.landing-cta:hover .landing-cta-icon {
+  transform: translateX(2px);
+}
+
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-shell {
+    min-height: 100svh;
+  }
+
+  .landing-hero {
+    gap: 0.45rem;
+    transform: translateY(0.5vh);
+  }
+
+  .landing-backdrop {
+    background-position: 58% center;
+    transform: scale(1.08);
+  }
+
+  .landing-copy {
+    width: min(27rem, 88vw);
+    line-height: 1.55;
+  }
+
+  .landing-cta {
+    width: min(100%, 14rem);
+    margin-top: 1rem;
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@subvote/subgraph",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "codegen": "graph codegen subgraph.yaml",
+    "build": "graph build subgraph.yaml",
+    "create-local": "graph create --node http://127.0.0.1:8020 subvote/example",
+    "deploy-local": "graph deploy --node http://127.0.0.1:8020 --ipfs http://127.0.0.1:5001 subvote/example subgraph.yaml",
+    "remove-local": "graph remove --node http://127.0.0.1:8020 subvote/example",
+    "docker:up": "docker compose -f ./local/docker-compose.yml up -d",
+    "docker:down": "docker compose -f ./local/docker-compose.yml down",
+    "docker:logs": "docker compose -f ./local/docker-compose.yml logs -f graph-node"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-ts": "0.38.2"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "0.98.1"
+  }
+}

@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: graph
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-let-me-in}
+      POSTGRES_DB: graph-node
+    ports:
+      - "5432:5432"
+    volumes:
+      - graph-node-postgres:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
+
+  ipfs:
+    image: ipfs/kubo:latest
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+
+  graph-node:
+    image: graphprotocol/graph-node:v0.41.2
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - ipfs
+    ports:
+      - "8000:8000"
+      - "8020:8020"
+      - "8030:8030"
+      - "8040:8040"
+    command:
+      - graph-node
+      - --node-id
+      - local-node
+      - --postgres-url
+      - postgresql://graph:${POSTGRES_PASSWORD:-let-me-in}@postgres:5432/graph-node
+      - --ethereum-rpc
+      - ${GRAPH_ETHEREUM_RPC:-polkadot-hub-testnet:https://services.polkadothub-rpc.com/testnet}
+      - --ipfs
+      - ipfs:5001
+    environment:
+      GRAPH_LOG: info
+
+volumes:
+  graph-node-postgres:

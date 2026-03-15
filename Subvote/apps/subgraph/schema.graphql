@@ -1,0 +1,9 @@
+type VoteCast @entity(immutable: true) {
+  id: Bytes!
+  proposalId: BigInt!
+  voter: Bytes!
+  choice: String!
+  transactionHash: Bytes!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+}

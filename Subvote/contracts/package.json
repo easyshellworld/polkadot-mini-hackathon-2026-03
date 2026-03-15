@@ -1,0 +1,9 @@
+{
+  "name": "@subvote/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "echo \"Contracts workspace is source-only until a Solidity toolchain is added.\""
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@subvote/workspace",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter @subvote/web build",
+    "check": "pnpm --filter @subvote/web check",
+    "db:generate": "pnpm --filter @subvote/web db:generate",
+    "db:migrate": "pnpm --filter @subvote/web db:migrate",
+    "db:deploy": "pnpm --filter @subvote/web db:deploy",
+    "db:push": "pnpm --filter @subvote/web db:push",
+    "db:studio": "pnpm --filter @subvote/web db:studio",
+    "dev": "pnpm --filter @subvote/web dev",
+    "format:check": "pnpm --filter @subvote/web format:check",
+    "format:write": "pnpm --filter @subvote/web format:write",
+    "lint": "pnpm --filter @subvote/web lint",
+    "lint:fix": "pnpm --filter @subvote/web lint:fix",
+    "preview": "pnpm --filter @subvote/web preview",
+    "start": "pnpm --filter @subvote/web start",
+    "contracts:check": "pnpm --filter @subvote/contracts check",
+    "subgraph:build": "pnpm --filter @subvote/subgraph build",
+    "subgraph:codegen": "pnpm --filter @subvote/subgraph codegen",
+    "subgraph:create-local": "pnpm --filter @subvote/subgraph create-local",
+    "subgraph:deploy-local": "pnpm --filter @subvote/subgraph deploy-local",
+    "subgraph:docker:down": "pnpm --filter @subvote/subgraph docker:down",
+    "subgraph:docker:logs": "pnpm --filter @subvote/subgraph docker:logs",
+    "subgraph:docker:up": "pnpm --filter @subvote/subgraph docker:up",
+    "subgraph:remove-local": "pnpm --filter @subvote/subgraph remove-local",
+    "typecheck": "pnpm --filter @subvote/web typecheck"
+  },
+  "packageManager": "pnpm@10.15.0"
+}
